@@ -78,6 +78,19 @@ const STATE = {
   userLng: 0.7365
 };
 
+const CARD_POOL = [
+  { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },
+  { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },
+  { name: "Garza Real", attack: 60, defense: 60, type: "Especial" },
+  { name: "Flamenco de Fangar", attack: 75, defense: 50, type: "Ataque" },
+  { name: "Cangrejo Azul", attack: 80, defense: 70, type: "Ataque" },
+  { name: "Anguila del Delta", attack: 65, defense: 45, type: "Especial" },
+  { name: "Guardián de la Laguna", attack: 30, defense: 95, type: "Defensa" },
+  { name: "Viento de Garbí", attack: 70, defense: 30, type: "Ataque" },
+  { name: "Esparvaró del Delta", attack: 90, defense: 35, type: "Ataque" },
+  { name: "Tortuga de Mar", attack: 40, defense: 100, type: "Defensa" }
+];
+
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
@@ -108,7 +121,7 @@ function showLobby(){
       </div>
       <div id="adminOptions" style="display:none; background:#f0f4f8; padding:10px; border-radius:8px; margin-bottom:10px;">
         <label style="font-size:12px; color:#073b4c;">Tiempo de partida (minutos):</label><br>
-        <input type="number" id="gameDuration" value="60" style="width:50%"><br>
+        <input type="number" id="gameDuration" value="30" style="width:50%"><br>
         <label style="font-size:12px; color:#073b4c;">Cartas máximas en mapa:</label><br>
         <input type="number" id="maxCards" value="10" style="width:50%">
       </div>
@@ -134,16 +147,51 @@ window.joinGame = async function(){
   STATE.team = team;
   STATE.isAdmin = isAdmin;
 
+  let durationMinutes = 60; // Por defecto
+
   if(isAdmin){
-    const duration = parseInt(document.getElementById("gameDuration").value) || 60;
-    // Guardar configuración de sala en Supabase
+    durationMinutes = parseInt(document.getElementById("gameDuration").value) || 30;
+    const maxCards = parseInt(document.getElementById("maxCards").value) || 10;
+
+    // 1. Guardar/Actualizar configuración de la sala
     await supabase.from('rooms').upsert({
       code: STATE.roomCode,
       active: true,
-      duration: duration,
+      duration: durationMinutes,
       red_score: 0,
       blue_score: 0
     });
+
+    // 2. Borrar geocaches antiguos de la sala para regenerar
+    await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
+
+    // 3. Generar dinámicamente la cantidad de cartas elegidas cerca de Deltebre
+    const newGeocaches = [];
+    for(let i = 0; i < maxCards; i++){
+      const template = CARD_POOL[i % CARD_POOL.length];
+      // Pequeña variación aleatoria de ubicación alrededor de Deltebre
+      const offsetLat = (Math.random() - 0.5) * 0.015;
+      const offsetLng = (Math.random() - 0.5) * 0.015;
+
+      newGeocaches.push({
+        room_code: STATE.roomCode,
+        lat: STATE.userLat + offsetLat,
+        lng: STATE.userLng + offsetLng,
+        card_name: template.name,
+        card_type: template.type,
+        attack: template.attack,
+        defense: template.defense,
+        claimed: false
+      });
+    }
+
+    await supabase.from('geocaches').insert(newGeocaches);
+  } else {
+    // Si no es admin, obtener la duración configurada previamente para esa sala
+    const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
+    if(roomData && roomData.duration){
+      durationMinutes = roomData.duration;
+    }
   }
 
   document.getElementById("lobbyModal").remove();
@@ -155,7 +203,7 @@ window.joinGame = async function(){
   loadGeocachesFromSupabase();
   listenRoomChanges();
   setupRealtimePresence();
-  startTimer(60 * 60); // Iniciar temporizador predeterminado
+  startTimer(durationMinutes * 60); // Arrancar temporizador dinámico
 };
 
 function initMap(){
@@ -223,6 +271,7 @@ async function loadGeocachesFromSupabase(){
 }
 
 function startTimer(durationSeconds){
+  if(timerInterval) clearInterval(timerInterval);
   let timer = durationSeconds;
   const display = document.getElementById("timer");
   timerInterval = setInterval(() => {
