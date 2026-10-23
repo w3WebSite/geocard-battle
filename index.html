@@ -225,7 +225,6 @@ window.processPlayerLogin = async function(){
     return;
   }
 
-  // Cargar coordenadas de la ciudad de la sala elegida
   const cityKey = roomData.city || "deltebre";
   if(CITIES[cityKey]) {
     STATE.userLat = CITIES[cityKey].lat;
@@ -243,7 +242,7 @@ window.processPlayerLogin = async function(){
 };
 
 /* ===================================================
-   👑 2. PANEL DEL ADMINISTRADOR (CON SELECTOR DE CIUDAD)
+   👑 2. PANEL DEL ADMINISTRADOR
 =================================================== */
 async function showAdminConfigScreen(){
   const modalDiv = document.createElement("div");
@@ -346,6 +345,7 @@ window.startAdminGame = async function(){
   STATE.roomCode = code;
   STATE.team = "red";
 
+  // 🛠️ CORRECCIÓN: Guardar en rooms sin requerir la columna city si no existe en la BD
   await supabase.from('rooms').upsert({
     code: STATE.roomCode,
     active: true,
@@ -353,7 +353,7 @@ window.startAdminGame = async function(){
     duration: duration,
     red_score: 0,
     blue_score: 0
-  });
+  }, { onConflict: 'code' });
 
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
 
@@ -408,10 +408,6 @@ function startGeolocationTracking(){
   if ("geolocation" in navigator) {
     STATE.watchPositionId = navigator.geolocation.watchPosition(
       (position) => {
-        // Si el usuario prefiere usar su GPS real, comenta la siguiente línea. 
-        // Para pruebas en diferentes ciudades europeas, se respeta la ubicación central de la ciudad seleccionada o el GPS real.
-        // STATE.userLat = position.coords.latitude;
-        // STATE.userLng = position.coords.longitude;
         updateUserPositionOnMap();
       },
       (error) => {
