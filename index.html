@@ -65,6 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
+// Correo configurado como Admin según tu captura
 const ADMIN_EMAIL = "paraquelavols";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -83,7 +84,6 @@ const STATE = {
   watchPositionId: null
 };
 
-// 🎴 REPERTORIO AMPLIADO DE CARTAS DEL DELTA
 const CARD_POOL = [
   { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },
   { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },
@@ -182,7 +182,6 @@ window.startAdminGame = async function(){
   STATE.roomCode = code;
   STATE.team = "red";
 
-  // 1. Crear o reiniciar la sala
   await supabase.from('rooms').upsert({
     code: STATE.roomCode,
     active: true,
@@ -191,10 +190,8 @@ window.startAdminGame = async function(){
     blue_score: 0
   });
 
-  // 2. BORRAR TODAS LAS CARTAS ANTIGUAS DE ESTA SALA EN SUPABASE
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
 
-  // 3. Generar ÚNICAMENTE la cantidad exacta pedida con mejor dispersión
   const newGeocaches = [];
   for(let i = 0; i < maxCards; i++){
     const template = CARD_POOL[i % CARD_POOL.length];
@@ -220,7 +217,7 @@ window.startAdminGame = async function(){
 };
 
 /* ===================================================
-   🎮 2B. PANTALLA EXCLUSIVA JUGADOR
+   🎮 2B. PANTALLA EXCLUSIVA JUGADOR (CON VALIDACIÓN DE SALA)
 =================================================== */
 function showPlayerJoinScreen(){
   const modalDiv = document.createElement("div");
@@ -247,14 +244,21 @@ window.joinPlayerGame = async function(){
 
   if(!code){ swal("Error", "Introduce un código de sala válido", "warning"); return; }
 
+  // VERIFICAR SI LA SALA EXISTE CREADA POR EL ADMIN
+  const { data: roomData, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('code', code)
+    .single();
+
+  if(error || !roomData) {
+    swal("Sala no encontrada ❌", "El código de sala introducido no existe o el Administrador aún no lo ha creado.", "error");
+    return;
+  }
+
   STATE.roomCode = code;
   STATE.team = team;
-
-  let durationMinutes = 30;
-  const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
-  if(roomData && roomData.duration){
-    durationMinutes = roomData.duration;
-  }
+  const durationMinutes = roomData.duration || 30;
 
   document.getElementById("playerModal").remove();
   launchGameEngine(durationMinutes);
