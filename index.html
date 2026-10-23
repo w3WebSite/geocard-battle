@@ -65,7 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
-const ADMIN_EMAIL = "calamaro";
+const ADMIN_EMAIL = "motar3000@gmial.com";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -113,110 +113,158 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
 
-function showLobby(){
+/* ===================================================
+   🔐 1. PANTALLA DE LOGIN INICIAL
+=================================================== */
+function showLoginScreen(){
   const defaultEmail = "jugador_" + Math.floor(Math.random() * 1000) + "@game.com";
   
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
-  modalDiv.id = "lobbyModal";
+  modalDiv.id = "loginModal";
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Delta</h2>
-      <p style="margin-bottom:5px; font-size:13px;">Tu Correo de Jugador:</p>
-      <input id="emailInput" value="${defaultEmail}" placeholder="correo@ejemplo.com"><br>
-      <input id="codeInput" value="TEST1" placeholder="Código de Sala"><br>
-      <select id="teamSelect">
-        <option value="red">Equipo Rojo 🔴</option>
-        <option value="blue">Equipo Azul 🔵</option>
-      </select><br>
-      <div style="margin: 10px 0; text-align: left; padding-left: 30px;">
-        <input type="checkbox" id="adminCheck" onchange="toggleAdminOptions()"> <b>Modo Administrador</b>
-      </div>
-      <div id="adminOptions" style="display:none; background:#f0f4f8; padding:10px; border-radius:8px; margin-bottom:10px;">
-        <label style="font-size:12px; color:#073b4c;">Tiempo de partida (minutos):</label><br>
-        <input type="number" id="gameDuration" value="30" style="width:50%"><br>
-        <label style="font-size:12px; color:#073b4c;">Cartas máximas en mapa:</label><br>
-        <input type="number" id="maxCards" value="12" style="width:50%">
-      </div>
-      <button onclick="window.joinGame()" style="width:90%;">Entrar al Juego 🚀</button>
+      <p style="margin-bottom:10px; font-size:14px; color:#073b4c;"><b>Iniciar Sesión</b></p>
+      <input id="loginEmail" value="${defaultEmail}" placeholder="Tu Correo Electrónico"><br><br>
+      <button onclick="window.processLogin()" style="width:90%;">Continuar ➡️</button>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
 
-window.toggleAdminOptions = function(){
-  const email = document.getElementById("emailInput").value.trim().toLowerCase();
-  const adminCheck = document.getElementById("adminCheck");
-
-  if(adminCheck.checked){
-    if(email !== ADMIN_EMAIL.toLowerCase()){
-      swal("Acceso Denegado 🔒", "El correo introducido no tiene permisos de Administrador.", "error");
-      adminCheck.checked = false;
-      document.getElementById("adminOptions").style.display = "none";
-      return;
-    }
-    document.getElementById("adminOptions").style.display = "block";
-  } else {
-    document.getElementById("adminOptions").style.display = "none";
-  }
-}
-
-window.joinGame = async function(){
-  const email = document.getElementById("emailInput").value.trim();
-  const code = document.getElementById("codeInput").value.trim().toUpperCase();
-  const team = document.getElementById("teamSelect").value;
-  const isAdminCheck = document.getElementById("adminCheck").checked;
-
-  if(!email || !code){ swal("Error", "Introduce un correo y código válidos", "warning"); return; }
+window.processLogin = function(){
+  const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+  if(!email){ swal("Error", "Introduce un correo válido", "warning"); return; }
 
   STATE.user.email = email;
-  STATE.roomCode = code;
-  STATE.team = team;
-  STATE.isAdmin = isAdminCheck && (email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+  STATE.isAdmin = (email === ADMIN_EMAIL.toLowerCase());
 
-  let durationMinutes = 60;
+  document.getElementById("loginModal").remove();
 
   if(STATE.isAdmin){
-    durationMinutes = parseInt(document.getElementById("gameDuration").value) || 30;
-    const maxCards = parseInt(document.getElementById("maxCards").value) || 12;
-
-    await supabase.from('rooms').upsert({
-      code: STATE.roomCode,
-      active: true,
-      duration: durationMinutes,
-      red_score: 0,
-      blue_score: 0
-    });
-
-    await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
-
-    const newGeocaches = [];
-    for(let i = 0; i < maxCards; i++){
-      const template = CARD_POOL[i % CARD_POOL.length];
-      const offsetLat = (Math.random() - 0.5) * 0.015;
-      const offsetLng = (Math.random() - 0.5) * 0.015;
-
-      newGeocaches.push({
-        room_code: STATE.roomCode,
-        lat: STATE.userLat + offsetLat,
-        lng: STATE.userLng + offsetLng,
-        card_name: template.name,
-        card_type: template.type,
-        attack: template.attack,
-        defense: template.defense,
-        claimed: false
-      });
-    }
-
-    await supabase.from('geocaches').insert(newGeocaches);
+    showAdminConfigScreen();
   } else {
-    const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
-    if(roomData && roomData.duration){
-      durationMinutes = roomData.duration;
-    }
+    showPlayerJoinScreen();
+  }
+};
+
+/* ===================================================
+   🛠️ 2A. PANTALLA EXCLUSIVA ADMINISTRADOR
+=================================================== */
+function showAdminConfigScreen(){
+  const modalDiv = document.createElement("div");
+  modalDiv.className = "modal";
+  modalDiv.id = "adminModal";
+  modalDiv.innerHTML = `
+    <div>
+      <h2>👑 Panel del Administrador</h2>
+      <p style="font-size:13px; color:#2a9d8f;"><b>Bienvenido, Admin (${STATE.user.email})</b></p>
+      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Código de la Sala:</label><br>
+      <input id="adminRoomCode" value="TEST1" placeholder="Ej: TEST1"><br>
+      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Tiempo de partida (minutos):</label><br>
+      <input type="number" id="adminDuration" value="30"><br>
+      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Cartas máximas en el mapa:</label><br>
+      <input type="number" id="adminMaxCards" value="12"><br><br>
+      <button onclick="window.startAdminGame()" style="width:90%;">Crear y Lanzar Partida 🚀</button>
+    </div>
+  `;
+  document.body.appendChild(modalDiv);
+}
+
+window.startAdminGame = async function(){
+  const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
+  const duration = parseInt(document.getElementById("adminDuration").value) || 30;
+  const maxCards = parseInt(document.getElementById("adminMaxCards").value) || 12;
+
+  if(!code){ swal("Error", "El código de sala no puede estar vacío", "warning"); return; }
+
+  STATE.roomCode = code;
+  STATE.team = "red"; // El admin puede unirse por defecto o elegir
+
+  // 1. Guardar la configuración oficial de la partida en Supabase
+  await supabase.from('rooms').upsert({
+    code: STATE.roomCode,
+    active: true,
+    duration: duration,
+    red_score: 0,
+    blue_score: 0
+  });
+
+  // 2. Limpiar cartas antiguas de esta sala
+  await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
+
+  // 3. Generar cartas en el mapa
+  const newGeocaches = [];
+  for(let i = 0; i < maxCards; i++){
+    const template = CARD_POOL[i % CARD_POOL.length];
+    const offsetLat = (Math.random() - 0.5) * 0.015;
+    const offsetLng = (Math.random() - 0.5) * 0.015;
+
+    newGeocaches.push({
+      room_code: STATE.roomCode,
+      lat: STATE.userLat + offsetLat,
+      lng: STATE.userLng + offsetLng,
+      card_name: template.name,
+      card_type: template.type,
+      attack: template.attack,
+      defense: template.defense,
+      claimed: false
+    });
   }
 
-  document.getElementById("lobbyModal").remove();
+  await supabase.from('geocaches').insert(newGeocaches);
+
+  document.getElementById("adminModal").remove();
+  launchGameEngine(duration);
+};
+
+/* ===================================================
+   🎮 2B. PANTALLA EXCLUSIVA JUGADOR
+=================================================== */
+function showPlayerJoinScreen(){
+  const modalDiv = document.createElement("div");
+  modalDiv.className = "modal";
+  modalDiv.id = "playerModal";
+  modalDiv.innerHTML = `
+    <div>
+      <h2>🎮 Unirse a la Partida</h2>
+      <p style="font-size:13px; color:#1d3557;">Sesión: <b>${STATE.user.email}</b></p>
+      <input id="playerRoomCode" value="TEST1" placeholder="Código de Sala"><br>
+      <select id="playerTeamSelect">
+        <option value="red">Equipo Rojo 🔴</option>
+        <option value="blue">Equipo Azul 🔵</option>
+      </select><br><br>
+      <button onclick="window.joinPlayerGame()" style="width:90%;">Entrar al Juego 🚀</button>
+    </div>
+  `;
+  document.body.appendChild(modalDiv);
+}
+
+window.joinPlayerGame = async function(){
+  const code = document.getElementById("playerRoomCode").value.trim().toUpperCase();
+  const team = document.getElementById("playerTeamSelect").value;
+
+  if(!code){ swal("Error", "Introduce un código de sala válido", "warning"); return; }
+
+  STATE.roomCode = code;
+  STATE.team = team;
+
+  // Consultar la duración configurada previamente por el Admin para esta sala
+  let durationMinutes = 60;
+  const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
+  if(roomData && roomData.duration){
+    durationMinutes = roomData.duration;
+  }
+
+  document.getElementById("playerModal").remove();
+  launchGameEngine(durationMinutes);
+};
+
+/* ===================================================
+   🚀 3. MOTOR DEL JUEGO
+=================================================== */
+function launchGameEngine(durationMinutes){
   document.getElementById("panel").style.display = "block";
   document.getElementById("btnExit").style.display = "inline-block";
   document.getElementById("timerContainer").style.display = "block";
@@ -227,7 +275,7 @@ window.joinGame = async function(){
   listenRoomChanges();
   setupRealtimePresence();
   startTimer(durationMinutes * 60);
-};
+}
 
 function initMap(){
   if(STATE.mapInitialized) return;
@@ -324,7 +372,6 @@ async function loadGeocachesFromSupabase(){
         return;
       }
 
-      // Marcar geocache como reclamado en Supabase
       const { error: updateErr } = await supabase
         .from('geocaches')
         .update({ claimed: true, team: STATE.team })
@@ -332,7 +379,6 @@ async function loadGeocachesFromSupabase(){
 
       if(updateErr){ swal("Error al reclamar"); return; }
 
-      // 🔄 SISTEMA DE EVOLUCIÓN: Comprobar si el usuario ya tiene esta carta en su inventario
       const { data: existingCards } = await supabase
         .from('player_cards')
         .select('*')
@@ -341,7 +387,6 @@ async function loadGeocachesFromSupabase(){
         .eq('card_name', cache.card_name);
 
       if(existingCards && existingCards.length > 0) {
-        // Ya la tiene: Evolucionar sumando +15 de ataque y +15 de defensa
         const cardToUpgrade = existingCards[0];
         const newAttack = cardToUpgrade.attack + 15;
         const newDefense = cardToUpgrade.defense + 15;
@@ -353,7 +398,6 @@ async function loadGeocachesFromSupabase(){
 
         swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${cache.card_name}"!\nSus atributos han subido:\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
       } else {
-        // Primera vez que la consigue: Insertar nueva carta
         await supabase.from('player_cards').insert({
           room_code: STATE.roomCode,
           team: STATE.team,
@@ -647,12 +691,12 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
 document.getElementById("btnExit").addEventListener("click", () => {
   if (STATE.watchPositionId) navigator.geolocation.clearWatch(STATE.watchPositionId);
   if (roomChannel) supabase.removeChannel(roomChannel);
-  if (timerInterval) clearInterval(timerIndicator);
+  if (timerInterval) clearInterval(timerInterval);
   window.location.reload();
 });
 
-// Arrancar el Lobby
-showLobby();
+// Arrancar mostrando la Pantalla de Login limpia
+showLoginScreen();
 </script>
 </body>
 </html>
