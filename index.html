@@ -12,7 +12,6 @@ body{
   margin:0;
   font-family: 'Trebuchet MS', Arial, sans-serif;
   color:white;
-  /* 🌌 NUEVO FONDO CINEMÁTICO TÁCTICO EUROPEO CON PROFUNDIDAD */
   background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)), 
               url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");
   background-size: cover;
@@ -57,12 +56,10 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* 🗺️ FILTRO TÁCTICO MODERNO PARA EL MAPA */
 .leaflet-tile-pane {
   filter: brightness(0.75) contrast(1.2) saturate(0.85) hue-rotate(15deg);
 }
 
-/* 🎴 MARCADOR HOLOGRÁFICO DE CARTAS */
 .modernCardMarker {
   width: 36px;
   height: 48px;
@@ -123,15 +120,10 @@ option { background: #0f172a; color: white; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script type="module">
-/* =========================
-   ⚙️ CONFIGURACIÓN SUPABASE Y CIUDADES
-========================= */
-// Si existe window.SUPABASE_CONFIG (en local), lo usa. Si no, usa valores directos seguros para producción en Vercel
 const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) ? window.SUPABASE_CONFIG.URL : "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) ? window.SUPABASE_CONFIG.ANON_KEY : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
 const ADMIN_KEYWORD = "paraquelavols";
-
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const CITIES = {
@@ -186,12 +178,12 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
 
-/* ===================================================
-   🔐 1. PANTALLA DE ENTRADA CON ESTÉTICA CINEMÁTICA
-=================================================== */
+window.addEventListener('DOMContentLoaded', () => {
+  showLoginScreen();
+});
+
 function showLoginScreen(){
   const defaultNick = "Jugador_" + Math.floor(Math.random() * 900 + 100);
-  
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
   modalDiv.id = "loginModal";
@@ -221,9 +213,9 @@ window.showHowToPlay = function(){
       <h2>📜 Guía de Supervivencia</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
         <p><b>1. 🎮 Acceso por Nick:</b> Escribe tu apodo y el código de sala proporcionado por el Administrador.</p>
-        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad europea elegida. Acércate a menos de 50m de las cartas flotantes 🎴 para reclamarlas.</p>
+        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad europea elegida. Acércate a menos de 60m de las cartas flotantes 🎴 para reclamarlas.</p>
         <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
-        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un rival del equipo contrario a menos de 30m, ¡se desatará un combate de estrategia a 3 rondas!</p>
+        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un rival del equipo contrario a menos de 30m, ¡se desatará un combate a 3 rondas!</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -280,9 +272,6 @@ window.processPlayerLogin = async function(){
   launchGameEngine(roomData.duration || 30);
 };
 
-/* ===================================================
-   👑 2. PANEL DEL ADMINISTRADOR
-=================================================== */
 async function showAdminConfigScreen(){
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
@@ -311,7 +300,6 @@ async function showAdminConfigScreen(){
   modalDiv.innerHTML = `
     <div>
       <h2>👑 Panel del Administrador</h2>
-      
       <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
         <h4 style="margin:0 0 8px 0; color:#38bdf8;">✨ Crear Nueva Partida Europea:</h4>
         <label style="font-size:11px; font-weight:bold;">Código de Sala:</label><br>
@@ -331,7 +319,6 @@ async function showAdminConfigScreen(){
         <input type="number" id="adminMaxCards" value="12" style="width:90%"><br><br>
         <button onclick="window.startAdminGame()" style="width:100%; margin:0;">Crear y Lanzar 🚀</button>
       </div>
-
       <div style="text-align:left;">
         <h4 style="margin:0 0 8px 0; color:#38bdf8;">📋 Salas Existentes en Supabase:</h4>
         <div id="roomListContainer">${roomListHTML}</div>
@@ -398,8 +385,8 @@ window.startAdminGame = async function(){
   const newGeocaches = [];
   for(let i = 0; i < maxCards; i++){
     const template = CARD_POOL[i % CARD_POOL.length];
-    const offsetLat = (Math.random() - 0.5) * 0.04;
-    const offsetLng = (Math.random() - 0.5) * 0.04;
+    const offsetLat = (Math.random() - 0.5) * 0.03;
+    const offsetLng = (Math.random() - 0.5) * 0.03;
 
     newGeocaches.push({
       room_code: STATE.roomCode,
@@ -419,9 +406,6 @@ window.startAdminGame = async function(){
   launchGameEngine(duration);
 };
 
-/* ===================================================
-   🚀 3. MOTOR DEL JUEGO
-=================================================== */
 function launchGameEngine(durationMinutes){
   document.getElementById("panel").style.display = "block";
   document.getElementById("btnExit").style.display = "inline-block";
@@ -506,10 +490,10 @@ async function loadGeocachesFromSupabase(){
     .eq('room_code', STATE.roomCode)
     .eq('claimed', false);
 
-  if(error) { console.error(error); return; }
-  if(!data || data.length === 0) return;
+  if(error) { console.error("Error cargando cartas:", error); return; }
+  if(!data || data.length === 0) { console.log("No hay cartas pendientes en esta sala."); return; }
 
-  const group = [L.marker([STATE.userLat, STATE.userLng])];
+  const group = [];
 
   data.forEach(cache => {
     const cacheIcon = L.divIcon({
@@ -562,7 +546,7 @@ async function loadGeocachesFromSupabase(){
           card_name: cache.card_name,
           attack: cache.attack,
           defense: cache.defense,
-          image_url: cache.image_url
+          image_url: cache.image_url || ""
         });
 
         swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${cache.card_name}`, "success");
@@ -628,9 +612,6 @@ function updatePlayerMarkers(presenceState) {
   if(onlineEl) onlineEl.innerText = totalPlayers;
 }
 
-/* ===================================================
-   ⚔️ SISTEMA DE DUELO TÁCTICO POR TURNOS
-=================================================== */
 async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
   const { data: myCards } = await supabase
     .from('player_cards')
@@ -849,11 +830,8 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
 document.getElementById("btnExit").addEventListener("click", () => {
   if (STATE.watchPositionId) navigator.geolocation.clearWatch(STATE.watchPositionId);
   if (roomChannel) supabase.removeChannel(roomChannel);
-  if (timerInterval) clearInterval(timerInterval);
   window.location.reload();
 });
-
-showLoginScreen();
 </script>
 </body>
 </html>
