@@ -43,6 +43,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
 
 <div id="panel">
   <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>
+  <div style="font-size: 13px; margin: 4px 0;">👥 En línea: <span id="onlineCount">1</span></div>
   <div><span id="livesPanel"></span></div>
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
@@ -77,6 +78,9 @@ const STATE = {
   userLng: 0.7365
 };
 
+let playerMarkers = {};
+let roomChannel = null;
+
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -93,8 +97,6 @@ function initMap(){
 }
 
 async function loadGeocachesFromSupabase(){
-  console.log("Cargando geocaches para sala:", STATE.roomCode);
-
   const { data, error } = await supabase
     .from('geocaches')
     .select('*')
@@ -106,12 +108,7 @@ async function loadGeocachesFromSupabase(){
     return; 
   }
 
-  console.log("Geocaches recibidos:", data);
-
-  if(!data || data.length === 0){
-    console.warn("No hay cartas registradas para esta sala.");
-    return;
-  }
+  if(!data || data.length === 0) return;
 
   const group = [];
 
@@ -155,7 +152,6 @@ async function loadGeocachesFromSupabase(){
     });
   });
 
-  // Centrar el mapa donde están las cartas automáticamente
   if(group.length > 0){
     const featureGroup = L.featureGroup(group);
     STATE.map.fitBounds(featureGroup.getBounds().pad(0.3));
@@ -170,6 +166,67 @@ function listenRoomChanges(){
       if(payload.new.blue_score !== undefined) document.getElementById("blueScore").innerText = payload.new.blue_score;
     })
     .subscribe();
+}
+
+function setupRealtimePresence() {
+  roomChannel = supabase.channel(`room-presence-${STATE.roomCode}`, {
+    config: { presence: { key: STATE.user.email } }
+  });
+
+  roomChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = roomChannel.presenceState();
+      updatePlayerMarkers(state);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await roomChannel.track({
+          lat: STATE.userLat,
+          lng: STATE.userLng,
+          team: STATE.team,
+          online_at: new Date().toISOString()
+        });
+      }
+    });
+}
+
+function updatePlayerMarkers(presenceState) {
+  let totalPlayers = 0;
+  
+  Object.keys(playerMarkers).forEach(email => {
+    if (!presenceState[email]) {
+      STATE.map.removeLayer(playerMarkers[email]);
+      delete playerMarkers[email];
+    }
+  });
+
+  Object.keys(presenceState).forEach(email => {
+    const playerDatas = presenceState[email];
+    totalPlayers += playerDatas.length;
+    
+    playerDatas.forEach(data => {
+      if (email === STATE.user.email) return;
+
+      const color = data.team === 'red' ? '#e63946' : '#1d3557';
+      const playerIcon = L.divIcon({
+        className: "player-icon",
+        html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+
+      if (playerMarkers[email]) {
+        playerMarkers[email].setLatLng([data.lat, data.lng]);
+      } else {
+        const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
+        marker.bindPopup(`Jugador (${data.team.toUpperCase()})`);
+        playerMarkers[email] = marker;
+      }
+    });
+  });
+
+  const onlineEl = document.getElementById("onlineCount");
+  if(onlineEl) onlineEl.innerText = totalPlayers;
 }
 
 document.getElementById("btnInventory").addEventListener("click", async () => {
@@ -198,13 +255,20 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
   document.body.appendChild(div);
 });
 
-document.getElementById("btnExit").addEventListener("click", () => location.reload());
+// Botón de salir limpio que desconecta canales y recarga
+document.getElementById("btnExit").addEventListener("click", () => {
+  if (roomChannel) {
+    supabase.removeChannel(roomChannel);
+  }
+  window.location.reload();
+});
 
 // --- INICIALIZACIÓN AUTOMÁTICA ---
 document.getElementById("panel").style.display = "block";
 initMap();
 loadGeocachesFromSupabase();
 listenRoomChanges();
+setupRealtimePresence();
 </script>
 </body>
 </html>
