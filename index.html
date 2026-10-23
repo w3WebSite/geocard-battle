@@ -65,6 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
+// 📧 CORREO AUTORIZADO COMO ADMINISTRADOR
 const ADMIN_EMAIL = "paraquelavols";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -99,8 +100,6 @@ const CARD_POOL = [
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
-
-// Registro de cooldown para duelos con otros jugadores { email: timestamp }
 let battleCooldowns = {};
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -350,9 +349,6 @@ async function loadGeocachesFromSupabase(){
   }
 }
 
-/* ===================================
-   ⚔️ SISTEMA DE BATALLA PVP Y PROXIMIDAD
-=================================== */
 function updatePlayerMarkers(presenceState) {
   let totalPlayers = 0;
   const now = Date.now();
@@ -387,14 +383,12 @@ function updatePlayerMarkers(presenceState) {
         playerMarkers[email] = marker;
       }
 
-      // --- DETECTAR PROXIMIDAD DE COMBATE (Si es enemigo y está a menos de 30m) ---
       if(data.team !== STATE.team) {
         const distanceToEnemy = getDistanceInMeters(STATE.userLat, STATE.userLng, data.lat, data.lng);
         const lastBattle = battleCooldowns[email] || 0;
 
-        // Si están a menos de 30m y han pasado más de 2 minutos (120000 ms) desde la última batalla
         if(distanceToEnemy <= 30 && (now - lastBattle > 120000)){
-          battleCooldowns[email] = now; // Activar enfriamiento
+          battleCooldowns[email] = now;
           triggerPvPBattle(email, data.team);
         }
       }
@@ -406,7 +400,6 @@ function updatePlayerMarkers(presenceState) {
 }
 
 async function triggerPvPBattle(enemyEmail, enemyTeam) {
-  // Obtener las cartas del jugador actual
   const { data: myCards } = await supabase
     .from('player_cards')
     .select('*')
@@ -437,7 +430,7 @@ async function triggerPvPBattle(enemyEmail, enemyTeam) {
 
   window.startBattleResolution = async function(eEmail, eTeam) {
     const selectedIdx = parseInt(document.getElementById("battleCardSelect").value);
-    let myPower = 20; // Poder base
+    let myPower = 20;
     let chosenName = "Carta Básica";
 
     if(selectedIdx >= 0 && myCards[selectedIdx]) {
@@ -446,14 +439,12 @@ async function triggerPvPBattle(enemyEmail, enemyTeam) {
       chosenName = card.card_name;
     }
 
-    // Generar un poder aleatorio del rival para resolver el combate en tiempo real
     const enemyPower = Math.floor(Math.random() * 80) + 40;
     modal.remove();
 
     if(myPower >= enemyPower) {
       swal("¡VICTORIA EN DUELO! 🏆", `Tu ${chosenName} (${myPower} pts) ha derrotado al rival (${enemyPower} pts). ¡Has sumado +100 puntos para tu equipo!`, "success");
       
-      // Añadir +100 puntos al bando en Supabase
       const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
       const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
       if(currentRoom) {
@@ -483,7 +474,6 @@ function startTimer(durationSeconds){
     if (--timer < 0) {
       clearInterval(timerInterval);
       
-      // Consultar las puntuaciones finales de la sala en Supabase
       const { data: roomData } = await supabase
         .from('rooms')
         .select('red_score, blue_score')
@@ -505,24 +495,6 @@ function startTimer(durationSeconds){
       }).then(() => {
         window.location.reload();
       });
-    }
-  }, 1000);
-}
-  if(timerInterval) clearInterval(timerInterval);
-  let timer = durationSeconds;
-  const display = document.getElementById("timer");
-  timerInterval = setInterval(() => {
-    let minutes = parseInt(timer / 60, 10);
-    let seconds = parseInt(timer % 60, 10);
-
-    minutes = minutes < 10 ? "0" + minutes : minutes;
-    seconds = seconds < 10 ? "0" + seconds : seconds;
-
-    display.textContent = minutes + ":" + seconds;
-
-    if (--timer < 0) {
-      clearInterval(timerInterval);
-      swal("Partida Finalizada", "El tiempo de juego ha terminado.", "info");
     }
   }, 1000);
 }
