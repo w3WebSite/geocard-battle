@@ -44,7 +44,32 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
   border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:500px; text-align:center;
   max-height:85vh; overflow-y:auto;
 }
-.cacheMarker{ font-size:24px; filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
+/* Marcador moderno de cartas holográficas */
+.modernCardMarker {
+  width: 34px;
+  height: 46px;
+  background: linear-gradient(135deg, #2a9d8f, #1d3557);
+  border: 2px solid #e9c46a;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 18px;
+  box-shadow: 0 0 12px rgba(233, 196, 106, 0.7), 0 4px 10px rgba(0,0,0,0.5);
+  animation: floatCard 2.5s ease-in-out infinite;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.modernCardMarker:hover {
+  transform: scale(1.25) rotate(-3deg);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
+}
+
+@keyframes floatCard {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
 input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
 .room-item{
   background: #f0f4f8; padding: 10px; margin: 6px 0; border-radius: 8px;
