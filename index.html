@@ -470,6 +470,47 @@ function startTimer(durationSeconds){
   if(timerInterval) clearInterval(timerInterval);
   let timer = durationSeconds;
   const display = document.getElementById("timer");
+  
+  timerInterval = setInterval(async () => {
+    let minutes = parseInt(timer / 60, 10);
+    let seconds = parseInt(timer % 60, 10);
+
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    display.textContent = minutes + ":" + seconds;
+
+    if (--timer < 0) {
+      clearInterval(timerInterval);
+      
+      // Consultar las puntuaciones finales de la sala en Supabase
+      const { data: roomData } = await supabase
+        .from('rooms')
+        .select('red_score, blue_score')
+        .eq('code', STATE.roomCode)
+        .single();
+
+      const red = roomData ? (roomData.red_score || 0) : 0;
+      const blue = roomData ? (roomData.blue_score || 0) : 0;
+
+      let winnerMsg = "¡HAY UN EMPATE! 🤝";
+      if(red > blue) winnerMsg = "🏆 ¡EL EQUIPO ROJO 🔴 HA GANADO LA PARTIDA!";
+      else if(blue > red) winnerMsg = "🏆 ¡EL EQUIPO AZUL 🔵 HA GANADO LA PARTIDA!";
+
+      swal({
+        title: "¡Partida Finalizada! ⏳",
+        text: `${winnerMsg}\n\nPuntuación Final:\n🔴 Equipo Rojo: ${red} pts\n🔵 Equipo Azul: ${blue} pts`,
+        icon: "info",
+        button: "Volver al Lobby 🚀"
+      }).then(() => {
+        window.location.reload();
+      });
+    }
+  }, 1000);
+}
+  if(timerInterval) clearInterval(timerInterval);
+  let timer = durationSeconds;
+  const display = document.getElementById("timer");
   timerInterval = setInterval(() => {
     let minutes = parseInt(timer / 60, 10);
     let seconds = parseInt(timer % 60, 10);
