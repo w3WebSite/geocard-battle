@@ -78,7 +78,10 @@ const STATE = {
   map: null,
   mapInitialized: false,
   userLat: 40.7164,
-  userLng: 0.7365
+  userLng: 0.7365,
+  userMarker: null,
+  rangeCircle: null,
+  watchPositionId: null
 };
 
 const CARD_POOL = [
@@ -141,7 +144,6 @@ window.toggleAdminOptions = function(){
   const email = document.getElementById("emailInput").value.trim().toLowerCase();
   const adminCheck = document.getElementById("adminCheck");
 
-  // Verificar si el correo coincide con el ADMIN_EMAIL
   if(adminCheck.checked){
     if(email !== ADMIN_EMAIL.toLowerCase()){
       swal("Acceso Denegado 🔒", "El correo introducido no tiene permisos de Administrador.", "error");
@@ -168,13 +170,12 @@ window.joinGame = async function(){
   STATE.team = team;
   STATE.isAdmin = isAdminCheck && (email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 
-  let durationMinutes = 60; // Por defecto
+  let durationMinutes = 60;
 
   if(STATE.isAdmin){
     durationMinutes = parseInt(document.getElementById("gameDuration").value) || 30;
     const maxCards = parseInt(document.getElementById("maxCards").value) || 10;
 
-    // 1. Guardar/Actualizar configuración de la sala
     await supabase.from('rooms').upsert({
       code: STATE.roomCode,
       active: true,
@@ -183,10 +184,8 @@ window.joinGame = async function(){
       blue_score: 0
     });
 
-    // 2. Borrar geocaches antiguos para regenerar la lista limpia
     await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
 
-    // 3. Generar dinámicamente las cartas
     const newGeocaches = [];
     for(let i = 0; i < maxCards; i++){
       const template = CARD_POOL[i % CARD_POOL.length];
@@ -207,7 +206,6 @@ window.joinGame = async function(){
 
     await supabase.from('geocaches').insert(newGeocaches);
   } else {
-    // Si es un jugador normal, obtener el tiempo ya configurado por el admin
     const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
     if(roomData && roomData.duration){
       durationMinutes = roomData.duration;
@@ -220,6 +218,7 @@ window.joinGame = async function(){
   document.getElementById("timerContainer").style.display = "block";
 
   initMap();
+  startGeolocationTracking();
   loadGeocachesFromSupabase();
   listenRoomChanges();
   setupRealtimePresence();
@@ -228,9 +227,73 @@ window.joinGame = async function(){
 
 function initMap(){
   if(STATE.mapInitialized) return;
-  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 14);
+  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(STATE.map);
   STATE.mapInitialized = true;
+}
+
+/* ===================================
+   📍 GEOLOCALIZACIÓN Y CÍRCULO EN VIVO
+=================================== */
+function startGeolocationTracking(){
+  if ("geolocation" in navigator) {
+    STATE.watchPositionId = navigator.geolocation.watchPosition(
+      (position) => {
+        STATE.userLat = position.coords.latitude;
+        STATE.userLng = position.coords.longitude;
+        updateUserPositionOnMap();
+      },
+      (error) => {
+        console.warn("GPS no disponible o denegado. Usando ubicación simulada en Deltebre.", error);
+        updateUserPositionOnMap();
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+    );
+  } else {
+    updateUserPositionOnMap();
+  }
+}
+
+function updateUserPositionOnMap(){
+  if(!STATE.map) return;
+
+  const color = STATE.team === 'red' ? '#e63946' : '#1d3557';
+  const playerIcon = L.divIcon({
+    className: "my-position-icon",
+    html: `<div style="background:${color}; width:20px; height:20px; border-radius:50%; border:3px solid white; box-shadow:0 0 10px rgba(0,0,0,0.6);"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  });
+
+  // 1. Actualizar o crear marcador del jugador actual
+  if(STATE.userMarker){
+    STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
+  } else {
+    STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
+    STATE.userMarker.bindPopup("<b>¡Tú estás aquí!</b>");
+  }
+
+  // 2. Actualizar o crear círculo de rango de captura (50 metros)
+  if(STATE.rangeCircle){
+    STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
+  } else {
+    STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], {
+      color: color,
+      fillColor: color,
+      fillOpacity: 0.15,
+      radius: 50 // Radio de 50 metros para interactuar con las cartas
+    }).addTo(STATE.map);
+  }
+
+  // 3. Notificar la nueva posición por Realtime Presence
+  if(roomChannel){
+    roomChannel.track({
+      lat: STATE.userLat,
+      lng: STATE.userLng,
+      team: STATE.team,
+      online_at: new Date().toISOString()
+    });
+  }
 }
 
 async function loadGeocachesFromSupabase(){
@@ -243,7 +306,8 @@ async function loadGeocachesFromSupabase(){
   if(error) { console.error(error); return; }
   if(!data || data.length === 0) return;
 
-  const group = [];
+  const group = [L.marker([STATE.userLat, STATE.userLng])];
+
   data.forEach(cache => {
     const cacheIcon = L.divIcon({
       className: "cache-icon",
@@ -258,7 +322,7 @@ async function loadGeocachesFromSupabase(){
     marker.on("click", async () => {
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
       if(distance > 50){
-        swal("Estás muy lejos", "Acércate a menos de 50 metros para reclamar esta carta.", "warning");
+        swal("Estás muy lejos (" + Math.round(distance) + "m)", "Entra dentro de tu círculo de 50m para reclamar esta carta.", "warning");
         return;
       }
 
@@ -406,8 +470,9 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
   document.body.appendChild(div);
 });
 
-// Botón de salir que limpia y regresa al lobby
+// Botón de salir que detiene la geolocalización y recarga
 document.getElementById("btnExit").addEventListener("click", () => {
+  if (STATE.watchPositionId) navigator.geolocation.clearWatch(STATE.watchPositionId);
   if (roomChannel) supabase.removeChannel(roomChannel);
   if (timerInterval) clearInterval(timerInterval);
   window.location.reload();
