@@ -27,16 +27,25 @@ button{
   font-weight:bold; cursor:pointer; transition:0.2s;
 }
 button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
+.btn-delete{
+  background: linear-gradient(45deg, #e63946, #d62828);
+  padding: 4px 8px; font-size: 11px; margin-left: 8px;
+}
 .modal{
   position:fixed; inset:0; background:rgba(0,0,0,.7);
   display:flex; justify-content:center; align-items:center; z-index:2000; padding:20px;
 }
 .modal > div{
   background:rgba(255,255,255,0.95); color:#073b4c; padding:30px;
-  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:480px; text-align:center;
+  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:500px; text-align:center;
+  max-height:85vh; overflow-y:auto;
 }
 .cacheMarker{ font-size:24px; filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
 input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
+.room-item{
+  background: #f0f4f8; padding: 10px; margin: 6px 0; border-radius: 8px;
+  display: flex; justify-content: space-between; align-items: center; font-size: 13px;
+}
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
@@ -65,13 +74,12 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
-// Correo oficial del Administrador
-const ADMIN_EMAIL = "paraquelavols";
+const ADMIN_KEYWORD = "paraquelavols";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STATE = {
-  user: { email: "" },
+  user: { email: "", nick: "" },
   roomCode: null,
   team: null,
   isAdmin: false,
@@ -114,10 +122,10 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 /* ===================================================
-   🔐 1. PANTALLA DE LOGIN
+   🔐 1. PANTALLA DE ENTRADA (JUGADOR / ADMIN)
 =================================================== */
 function showLoginScreen(){
-  const defaultEmail = "jugador_" + Math.floor(Math.random() * 1000) + "@game.com";
+  const defaultNick = "Jugador_" + Math.floor(Math.random() * 900 + 100);
   
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
@@ -125,52 +133,131 @@ function showLoginScreen(){
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Delta</h2>
-      <p style="margin-bottom:10px; font-size:14px; color:#073b4c;"><b>Iniciar Sesión</b></p>
-      <input id="loginEmail" value="${defaultEmail}" placeholder="Tu Correo Electrónico"><br><br>
-      <button onclick="window.processLogin()" style="width:90%;">Continuar ➡️</button>
+      <p style="margin-bottom:5px; font-size:13px; color:#073b4c;"><b>Introduce tu Nick o Clave Admin:</b></p>
+      <input id="loginNick" value="${defaultNick}" placeholder="Tu Nick / Nombre"><br>
+      <input id="playerRoomCode" value="" placeholder="Código de Sala"><br>
+      <select id="playerTeamSelect">
+        <option value="red">Equipo Rojo 🔴</option>
+        <option value="blue">Equipo Azul 🔵</option>
+      </select><br><br>
+      <button onclick="window.processPlayerLogin()" style="width:90%;">Entrar al Juego 🚀</button>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
 
-window.processLogin = function(){
-  const email = document.getElementById("loginEmail").value.trim().toLowerCase();
-  if(!email){ swal("Error", "Introduce un correo válido", "warning"); return; }
+window.processPlayerLogin = async function(){
+  const nickInput = document.getElementById("loginNick").value.trim();
+  const roomCodeInput = document.getElementById("playerRoomCode").value.trim().toUpperCase();
+  const team = document.getElementById("playerTeamSelect").value;
 
-  STATE.user.email = email;
-  STATE.isAdmin = (email === ADMIN_EMAIL.toLowerCase());
+  if(!nickInput){ swal("Error", "Debes ingresar un Nick para jugar", "warning"); return; }
+
+  // 👑 SI INTRODUCE LA CLAVE DE ADMINISTRADOR
+  if(nickInput.toLowerCase() === ADMIN_KEYWORD.toLowerCase()){
+    STATE.isAdmin = true;
+    STATE.user.nick = "Administrador";
+    STATE.user.email = "admin_paraquelavols@game.com";
+    document.getElementById("loginModal").remove();
+    showAdminConfigScreen();
+    return;
+  }
+
+  // 🎮 MODO JUGADOR NORMAL
+  if(!roomCodeInput){ 
+    swal("Falta Código", "Debes ingresar el Código de la Partida creada por el Administrador", "warning"); 
+    return; 
+  }
+
+  // Verificar si la sala existe en Supabase
+  const { data: roomData, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('code', roomCodeInput)
+    .eq('active', true)
+    .maybeSingle();
+
+  if(error || !roomData) {
+    swal("Sala no encontrada ❌", `La sala "${roomCodeInput}" no existe o el Administrador aún no la ha creado.`, "error");
+    return;
+  }
+
+  STATE.isAdmin = false;
+  STATE.user.nick = nickInput;
+  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}@game.com`;
+  STATE.roomCode = roomCodeInput;
+  STATE.team = team;
 
   document.getElementById("loginModal").remove();
-
-  if(STATE.isAdmin){
-    showAdminConfigScreen();
-  } else {
-    showPlayerJoinScreen();
-  }
+  launchGameEngine(roomData.duration || 30);
 };
 
 /* ===================================================
-   👑 2A. VISTA ADMINISTRADOR (CREA LA SALA)
+   👑 2. PANEL DEL ADMINISTRADOR (CON GESTOR DE SALAS)
 =================================================== */
-function showAdminConfigScreen(){
+async function showAdminConfigScreen(){
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
   modalDiv.id = "adminModal";
+
+  // Cargar salas existentes de Supabase
+  const { data: rooms } = await supabase.from('rooms').select('*');
+  let roomListHTML = "";
+
+  if(rooms && rooms.length > 0){
+    rooms.forEach(r => {
+      roomListHTML += `
+        <div class="room-item">
+          <span><b>${r.code}</b> (${r.duration} min)</span>
+          <button class="btn-delete" onclick="window.deleteRoom('${r.code}')">🗑️ Borrar</button>
+        </div>
+      `;
+    });
+  } else {
+    roomListHTML = "<p style='font-size:12px; color:#666;'>No hay salas creadas aún.</p>";
+  }
+
   modalDiv.innerHTML = `
     <div>
       <h2>👑 Panel del Administrador</h2>
-      <p style="font-size:13px; color:#2a9d8f;"><b>Administrador: ${STATE.user.email}</b></p>
-      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Código de Sala a crear:</label><br>
-      <input id="adminRoomCode" value="TEST1" placeholder="Ej: TEST1"><br>
-      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Tiempo de partida (minutos):</label><br>
-      <input type="number" id="adminDuration" value="30"><br>
-      <label style="font-size:12px; color:#073b4c; font-weight:bold;">Cartas máximas en el mapa:</label><br>
-      <input type="number" id="adminMaxCards" value="12"><br><br>
-      <button onclick="window.startAdminGame()" style="width:90%;">Crear y Lanzar Partida 🚀</button>
+      
+      <div style="background:#eef4f8; padding:12px; border-radius:12px; margin-bottom:15px; text-align:left;">
+        <h4 style="margin:0 0 8px 0; color:#073b4c;">✨ Crear Nueva Partida:</h4>
+        <label style="font-size:11px; font-weight:bold;">Código de Sala:</label><br>
+        <input id="adminRoomCode" value="TEST1" placeholder="Ej: TEST1" style="width:90%"><br>
+        <label style="font-size:11px; font-weight:bold;">Tiempo (minutos):</label><br>
+        <input type="number" id="adminDuration" value="30" style="width:90%"><br>
+        <label style="font-size:11px; font-weight:bold;">Cartas en mapa:</label><br>
+        <input type="number" id="adminMaxCards" value="12" style="width:90%"><br><br>
+        <button onclick="window.startAdminGame()" style="width:100%; margin:0;">Crear y Lanzar 🚀</button>
+      </div>
+
+      <div style="text-align:left;">
+        <h4 style="margin:0 0 8px 0; color:#073b4c;">📋 Salas Existentes en Supabase:</h4>
+        <div id="roomListContainer">${roomListHTML}</div>
+      </div>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
+
+window.deleteRoom = async function(codeToDelete){
+  swal({
+    title: "¿Borrar sala " + codeToDelete + "?",
+    text: "Esta acción eliminará la sala y todas sus cartas asociadas.",
+    icon: "warning",
+    buttons: ["Cancelar", "Sí, borrar"],
+    dangerMode: true,
+  }).then(async (willDelete) => {
+    if (willDelete) {
+      await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
+      await supabase.from('rooms').delete().eq('code', codeToDelete);
+      swal("Sala eliminada con éxito", { icon: "success" });
+      document.getElementById("adminModal").remove();
+      showAdminConfigScreen();
+    }
+  });
+};
 
 window.startAdminGame = async function(){
   const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
@@ -182,7 +269,6 @@ window.startAdminGame = async function(){
   STATE.roomCode = code;
   STATE.team = "red";
 
-  // Registrar la sala en la base de datos como activa
   await supabase.from('rooms').upsert({
     code: STATE.roomCode,
     active: true,
@@ -191,7 +277,6 @@ window.startAdminGame = async function(){
     blue_score: 0
   });
 
-  // Limpiar y sembrar cartas nuevas
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
 
   const newGeocaches = [];
@@ -216,58 +301,6 @@ window.startAdminGame = async function(){
 
   document.getElementById("adminModal").remove();
   launchGameEngine(duration);
-};
-
-/* ===================================================
-   🎮 2B. VISTA JUGADOR (VALIDA SI LA SALA EXISTE)
-=================================================== */
-function showPlayerJoinScreen(){
-  const modalDiv = document.createElement("div");
-  modalDiv.className = "modal";
-  modalDiv.id = "playerModal";
-  modalDiv.innerHTML = `
-    <div>
-      <h2>🎮 Unirse a la Partida</h2>
-      <p style="font-size:13px; color:#1d3557;">Sesión: <b>${STATE.user.email}</b></p>
-      <input id="playerRoomCode" value="" placeholder="Introduce el Código de Sala"><br>
-      <select id="playerTeamSelect">
-        <option value="red">Equipo Rojo 🔴</option>
-        <option value="blue">Equipo Azul 🔵</option>
-      </select><br><br>
-      <button onclick="window.joinPlayerGame()" style="width:90%;">Entrar al Juego 🚀</button>
-    </div>
-  `;
-  document.body.appendChild(modalDiv);
-}
-
-window.joinPlayerGame = async function(){
-  const code = document.getElementById("playerRoomCode").value.trim().toUpperCase();
-  const team = document.getElementById("playerTeamSelect").value;
-
-  if(!code){ 
-    swal("Atención", "Debes introducir el código de la sala creada por el Administrador", "warning"); 
-    return; 
-  }
-
-  // 🔒 VALIDACIÓN RIGUROSA EN SUPABASE: ¿Existe la sala creada por el Admin?
-  const { data: roomData, error } = await supabase
-    .from('rooms')
-    .select('*')
-    .eq('code', code)
-    .eq('active', true)
-    .maybeSingle();
-
-  if(error || !roomData) {
-    swal("Acceso Denegado 🔒", `La sala "${code}" no existe o aún no ha sido iniciada por el Administrador.`, "error");
-    return; // Detiene completamente el acceso
-  }
-
-  STATE.roomCode = code;
-  STATE.team = team;
-  const durationMinutes = roomData.duration || 30;
-
-  document.getElementById("playerModal").remove();
-  launchGameEngine(durationMinutes);
 };
 
 /* ===================================================
@@ -327,7 +360,7 @@ function updateUserPositionOnMap(){
     STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
   } else {
     STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
-    STATE.userMarker.bindPopup("<b>¡Tú estás aquí!</b>");
+    STATE.userMarker.bindPopup(`<b>${STATE.user.nick}</b>`);
   }
 
   if(STATE.rangeCircle){
@@ -343,6 +376,7 @@ function updateUserPositionOnMap(){
 
   if(roomChannel){
     roomChannel.track({
+      nick: STATE.user.nick,
       lat: STATE.userLat,
       lng: STATE.userLng,
       team: STATE.team,
@@ -460,7 +494,7 @@ function updatePlayerMarkers(presenceState) {
         playerMarkers[email].setLatLng([data.lat, data.lng]);
       } else {
         const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-        marker.bindPopup(`Jugador (${data.team.toUpperCase()})`);
+        marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team.toUpperCase()})`);
         playerMarkers[email] = marker;
       }
 
@@ -470,7 +504,7 @@ function updatePlayerMarkers(presenceState) {
 
         if(distanceToEnemy <= 30 && (now - lastBattle > 120000)){
           battleCooldowns[email] = now;
-          triggerTacticalPvPBattle(email, data.team);
+          triggerTacticalPvPBattle(email, data.team, data.nick || 'Rival');
         }
       }
     });
@@ -481,9 +515,9 @@ function updatePlayerMarkers(presenceState) {
 }
 
 /* ===================================================
-   ⚔️ SISTEMA DE DUELO TÁCTICO POR TURNOS (MEJOR DE 3)
+   ⚔️ SISTEMA DE DUELO TÁCTICO POR TURNOS
 =================================================== */
-async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
+async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
   const { data: myCards } = await supabase
     .from('player_cards')
     .select('*')
@@ -510,10 +544,10 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
   modal.innerHTML = `
     <div>
       <h2>⚔️ ¡DUELO TÁCTICO PVP!</h2>
-      <p>Te encuentras con un rival del equipo <b>${enemyTeam.toUpperCase()}</b>.</p>
+      <p>Te encuentras con <b>${enemyNick}</b> del equipo <b>${enemyTeam.toUpperCase()}</b>.</p>
       <p><b>Combate a 3 Rondas:</b> Selecciona tu carta para la <b>Ronda 1</b>:</p>
       <select id="roundCardSelect">${cardOptions}</select><br><br>
-      <button onclick="window.startRound1('${enemyEmail}', '${enemyTeam}')">Confirmar Ronda 1 🚀</button>
+      <button onclick="window.startRound1('${enemyEmail}', '${enemyTeam}', '${enemyNick}')">Confirmar Ronda 1 🚀</button>
     </div>
   `;
   document.body.appendChild(modal);
@@ -522,7 +556,7 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
   window.enemyWins = 0;
   window.storedCards = myCards || [];
 
-  window.startRound1 = function(eEmail, eTeam) {
+  window.startRound1 = function(eEmail, eTeam, eNick) {
     const sel = parseInt(document.getElementById("roundCardSelect").value);
     let myScore = 30;
     if(sel >= 0 && window.storedCards[sel]) {
@@ -535,14 +569,14 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
 
     document.querySelector(".modal > div").innerHTML = `
       <h2>⚔️ DUELO TÁCTICO - Ronda 2</h2>
-      <p>Parciales: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
+      <p>Parciales contra ${eNick}: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
       <p>Selecciona tu carta para la <b>Ronda 2</b>:</p>
       <select id="roundCardSelect">${cardOptions}</select><br><br>
-      <button onclick="window.startRound2('${eEmail}', '${eTeam}')">Confirmar Ronda 2 🚀</button>
+      <button onclick="window.startRound2('${eEmail}', '${eTeam}', '${eNick}')">Confirmar Ronda 2 🚀</button>
     `;
   };
 
-  window.startRound2 = function(eEmail, eTeam) {
+  window.startRound2 = function(eEmail, eTeam, eNick) {
     const sel = parseInt(document.getElementById("roundCardSelect").value);
     let myScore = 30;
     if(sel >= 0 && window.storedCards[sel]) {
@@ -555,14 +589,14 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
 
     document.querySelector(".modal > div").innerHTML = `
       <h2>⚔️ DUELO TÁCTICO - Ronda 3 (Final)</h2>
-      <p>Parciales: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
+      <p>Parciales contra ${eNick}: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
       <p>Selecciona tu carta para la <b>Ronda Definitiva</b>:</p>
       <select id="roundCardSelect">${cardOptions}</select><br><br>
-      <button onclick="window.finalizeBattle('${eEmail}', '${eTeam}')">¡Ver Resultado Final! 🏆</button>
+      <button onclick="window.finalizeBattle('${eEmail}', '${eTeam}', '${eNick}')">¡Ver Resultado Final! 🏆</button>
     `;
   };
 
-  window.finalizeBattle = async function(eEmail, eTeam) {
+  window.finalizeBattle = async function(eEmail, eTeam, eNick) {
     const sel = parseInt(document.getElementById("roundCardSelect").value);
     let myScore = 30;
     if(sel >= 0 && window.storedCards[sel]) {
@@ -576,7 +610,7 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
     modal.remove();
 
     if(window.myWins > window.enemyWins) {
-      swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra el equipo ${eTeam.toUpperCase()}. ¡Has sumado +150 puntos para tu equipo!`, "success");
+      swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra ${eNick}. ¡Has sumado +150 puntos para tu equipo!`, "success");
       
       const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
       const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
@@ -585,7 +619,7 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
         await supabase.from('rooms').update({ [scoreKey]: newScore }).eq('code', STATE.roomCode);
       }
     } else {
-      swal("DERROTA EN EL DUELO TÁCTICO 💔", `El rival ganó ${window.enemyWins} de 3 rondas. ¡Evoluciona tus cartas explorando más el mapa!`, "error");
+      swal("DERROTA EN EL DUELO TÁCTICO 💔", `${eNick} ganó ${window.enemyWins} de 3 rondas. ¡Evoluciona tus cartas explorando más el mapa!`, "error");
     }
   };
 }
@@ -655,6 +689,7 @@ function setupRealtimePresence() {
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
+          nick: STATE.user.nick,
           lat: STATE.userLat,
           lng: STATE.userLng,
           team: STATE.team,
@@ -704,7 +739,6 @@ document.getElementById("btnExit").addEventListener("click", () => {
   window.location.reload();
 });
 
-// Iniciar mostrando la pantalla de login
 showLoginScreen();
 </script>
 </body>
