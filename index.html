@@ -81,6 +81,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
 
+
 @keyframes floatCard {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
@@ -98,6 +99,30 @@ option { background: #0f172a; color: white; }
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;
   border: 1px solid rgba(255,255,255,0.08);
 }
+
+/* 📱 AJUSTES RESPONSIVE PARA MÓVILES */
+@media (max-width: 768px) {
+  /* Mueve el panel flotante un poco más abajo para que no tape el temporizador */
+  #panel {
+    top: 75px !important;
+    right: 10px !important;
+    padding: 10px 14px !important;
+    font-size: 12px;
+  }
+
+  /* Hace más compacto el contenedor del temporizador arriba a la izquierda/centro */
+  #timerContainer {
+    font-size: 14px !important;
+    margin: 5px 10px !important;
+  }
+
+  /* Reubica el botón de salir para que no estorbe */
+  #btnExit {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+}
+
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
