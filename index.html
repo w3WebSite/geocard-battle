@@ -33,7 +33,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
 }
 .modal > div{
   background:rgba(255,255,255,0.95); color:#073b4c; padding:30px;
-  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:450px; text-align:center;
+  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:480px; text-align:center;
 }
 .cacheMarker{ font-size:24px; filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
 input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
@@ -65,8 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
-// 📧 CORREO AUTORIZADO COMO ADMINISTRADOR
-const ADMIN_EMAIL = "paraquelavols";
+const ADMIN_EMAIL = "admin@geocard.com";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -389,7 +388,7 @@ function updatePlayerMarkers(presenceState) {
 
         if(distanceToEnemy <= 30 && (now - lastBattle > 120000)){
           battleCooldowns[email] = now;
-          triggerPvPBattle(email, data.team);
+          triggerTacticalPvPBattle(email, data.team);
         }
       }
     });
@@ -399,7 +398,10 @@ function updatePlayerMarkers(presenceState) {
   if(onlineEl) onlineEl.innerText = totalPlayers;
 }
 
-async function triggerPvPBattle(enemyEmail, enemyTeam) {
+/* ===================================================
+   ⚔️ SISTEMA DE DUELO TÁCTICO POR TURNOS (MEJOR DE 3)
+=================================================== */
+async function triggerTacticalPvPBattle(enemyEmail, enemyTeam) {
   const { data: myCards } = await supabase
     .from('player_cards')
     .select('*')
@@ -409,50 +411,97 @@ async function triggerPvPBattle(enemyEmail, enemyTeam) {
   let cardOptions = "";
   if(myCards && myCards.length > 0) {
     myCards.forEach((c, index) => {
-      cardOptions += `<option value="${index}">${c.card_name} (⚔️${c.attack} | 🛡️${c.defense})</option>`;
+      cardOptions += `<option value="${index}">${c.card_name} (⚔️Atq: ${c.attack} | 🛡️Def: ${c.defense})</option>`;
     });
   } else {
-    cardOptions = `<option value="-1">Sin cartas (Carta Básica ⚔️10 | 🛡️10)</option>`;
+    cardOptions = `<option value="-1">Carta Básica de Emergencia (⚔️15 | 🛡️15)</option>`;
   }
 
   const modal = document.createElement("div");
   modal.className = "modal";
   modal.innerHTML = `
     <div>
-      <h2>⚔️ ¡ENCUENTRO ENEMIGO DETECTADO!</h2>
-      <p>Un jugador del equipo <b>${enemyTeam.toUpperCase()}</b> está muy cerca de ti.</p>
-      <p>Elige tu carta para el duelo:</p>
-      <select id="battleCardSelect">${cardOptions}</select><br><br>
-      <button onclick="window.startBattleResolution('${enemyEmail}', '${enemyTeam}')">¡Luchar Ahora! 💥</button>
+      <h2>⚔️ ¡DUELO TÁCTICO PVP!</h2>
+      <p>Te encuentras con un rival del equipo <b>${enemyTeam.toUpperCase()}</b>.</p>
+      <p><b>Combate a 3 Rondas:</b> Selecciona tu carta para la <b>Ronda 1</b>:</p>
+      <select id="roundCardSelect">${cardOptions}</select><br><br>
+      <button onclick="window.startRound1('${enemyEmail}', '${enemyTeam}')">Confirmar Ronda 1 🚀</button>
     </div>
   `;
   document.body.appendChild(modal);
 
-  window.startBattleResolution = async function(eEmail, eTeam) {
-    const selectedIdx = parseInt(document.getElementById("battleCardSelect").value);
-    let myPower = 20;
-    let chosenName = "Carta Básica";
+  // Variables locales del duelo actual
+  window.myWins = 0;
+  window.enemyWins = 0;
+  window.currentRound = 1;
+  window.storedCards = myCards || [];
 
-    if(selectedIdx >= 0 && myCards[selectedIdx]) {
-      const card = myCards[selectedIdx];
-      myPower = card.attack + card.defense;
-      chosenName = card.card_name;
+  window.startRound1 = function(eEmail, eTeam) {
+    const sel = parseInt(document.getElementById("roundCardSelect").value);
+    let myScore = 30;
+    if(sel >= 0 && window.storedCards[sel]) {
+      myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
     }
+    const enemyScore = Math.floor(Math.random() * 120) + 20;
 
-    const enemyPower = Math.floor(Math.random() * 80) + 40;
+    if(myScore >= enemyScore) window.myWins++;
+    else window.enemyWins++;
+
+    // Pasar a Ronda 2
+    document.querySelector(".modal > div").innerHTML = `
+      <h2>⚔️ DUELO TÁCTICO - Ronda 2</h2>
+      <p>Resultados parciales: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
+      <p>Selecciona tu carta para la <b>Ronda 2</b>:</p>
+      <select id="roundCardSelect">${cardOptions}</select><br><br>
+      <button onclick="window.startRound2('${eEmail}', '${eTeam}')">Confirmar Ronda 2 🚀</button>
+    `;
+  };
+
+  window.startRound2 = function(eEmail, eTeam) {
+    const sel = parseInt(document.getElementById("roundCardSelect").value);
+    let myScore = 30;
+    if(sel >= 0 && window.storedCards[sel]) {
+      myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
+    }
+    const enemyScore = Math.floor(Math.random() * 120) + 20;
+
+    if(myScore >= enemyScore) window.myWins++;
+    else window.enemyWins++;
+
+    // Pasar a Ronda 3 (Definitiva)
+    document.querySelector(".modal > div").innerHTML = `
+      <h2>⚔️ DUELO TÁCTICO - Ronda 3 (Final)</h2>
+      <p>Resultados parciales: Tú (${window.myWins}) - Rival (${window.enemyWins})</p>
+      <p>Selecciona tu carta para la <b>Ronda Definitiva</b>:</p>
+      <select id="roundCardSelect">${cardOptions}</select><br><br>
+      <button onclick="window.finalizeBattle('${eEmail}', '${eTeam}')">¡Ver Resultado Final! 🏆</button>
+    `;
+  };
+
+  window.finalizeBattle = async function(eEmail, eTeam) {
+    const sel = parseInt(document.getElementById("roundCardSelect").value);
+    let myScore = 30;
+    if(sel >= 0 && window.storedCards[sel]) {
+      myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
+    }
+    const enemyScore = Math.floor(Math.random() * 120) + 20;
+
+    if(myScore >= enemyScore) window.myWins++;
+    else window.enemyWins++;
+
     modal.remove();
 
-    if(myPower >= enemyPower) {
-      swal("¡VICTORIA EN DUELO! 🏆", `Tu ${chosenName} (${myPower} pts) ha derrotado al rival (${enemyPower} pts). ¡Has sumado +100 puntos para tu equipo!`, "success");
+    if(window.myWins > window.enemyWins) {
+      swal("¡VICTORIA TOTAL EN DUELO! 🏆", `Has ganado ${window.myWins} de 3 rondas contra el equipo ${eTeam.toUpperCase()}. ¡Has sumado +150 puntos para tu equipo!`, "success");
       
       const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
       const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
       if(currentRoom) {
-        const newScore = (currentRoom[scoreKey] || 0) + 100;
+        const newScore = (currentRoom[scoreKey] || 0) + 150;
         await supabase.from('rooms').update({ [scoreKey]: newScore }).eq('code', STATE.roomCode);
       }
     } else {
-      swal("DERROTA EN DUELO 💔", `Tu ${chosenName} (${myPower} pts) fue superada por la carta rival (${enemyPower} pts). ¡Sigue buscando mejores cartas!`, "error");
+      swal("DERROTA EN EL DUELO TÁCTICO 💔", `El rival ganó ${window.enemyWins} de 3 rondas. ¡Mejora tus cartas explorando más el mapa!`, "error");
     }
   };
 }
