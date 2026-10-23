@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>GeoCard Battle - Delta</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+body{
+  margin:0;
+  font-family: 'Trebuchet MS', Arial, sans-serif;
+  color:white;
+  background: linear-gradient(rgba(0, 70, 60, 0.65), rgba(0, 120, 150, 0.45)), url("https://i.ibb.co/DD9h8GS9/Deltebre-Faro-del-Fangar.webp");
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
+}
+#map{ height:500px; width:100%; margin-top:20px; }
+#panel{
+  position:fixed; top:15px; right:15px; background:rgba(255,255,255,0.9);
+  color:#073b4c; padding:14px 18px; border-radius:14px; z-index:500;
+  display:none; box-shadow:0 8px 20px rgba(0,0,0,0.2); font-weight:bold;
+}
+button{
+  margin:6px; padding:12px 16px; border:none; border-radius:12px;
+  background:linear-gradient(45deg,#2a9d8f,#1d3557); color:white;
+  font-weight:bold; cursor:pointer; transition:0.2s;
+}
+button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
+.modal{
+  position:fixed; inset:0; background:rgba(0,0,0,.7);
+  display:flex; justify-content:center; align-items:center; z-index:2000; padding:20px;
+}
+.modal > div{
+  background:rgba(255,255,255,0.95); color:#073b4c; padding:30px;
+  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:500px; text-align:center;
+}
+.cacheMarker{ font-size:24px; filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
+</style>
+<script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
+</head>
+<body>
+
+<div id="panel">
+  <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>
+  <div><span id="livesPanel"></span></div>
+  <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
+</div>
+
+<button id="btnExit">Salir</button>
+<h2>Tiempo restante: <span id="timer">00:00</span></h2>
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Supabase SDK UMD -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script type="module">
+/* =========================
+   ⚙️ CONFIGURACIÓN SUPABASE
+========================= */
+const SUPABASE_URL = "TU_SUPABASE_URL_AQUÍ";
+const SUPABASE_ANON_KEY = "TU_SUPABASE_ANON_KEY_AQUÍ";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const STATE = {
+  user: { email: "jugador_" + Math.floor(Math.random() * 1000) + "@game.com" },
+  roomCode: null,
+  team: null,
+  lives: 3,
+  map: null,
+  mapInitialized: false,
+  userLat: 40.7164,
+  userLng: 0.7365
+};
+
+const SAMPLE_CARDS = [
+  { name: "Guerrero de Arrozal", type: "Tierra", attack: 45, defense: 30, image: "🌾" },
+  { name: "Furtivo del Fangar", type: "Agua", attack: 60, defense: 20, image: "🌊" },
+  { name: "Flamenco Real", type: "Aire", attack: 50, defense: 40, image: "🦩" },
+  { name: "Cangrejo Azul Gigante", type: "Agua", attack: 70, defense: 50, image: "🦀" }
+];
+
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function modal(html){
+  const div = document.createElement("div");
+  div.className = "modal";
+  div.innerHTML = `<div>${html}</div>`;
+  document.body.appendChild(div);
+  return div;
+}
+
+// Pantalla inicial para introducir código de sala y elegir equipo
+function showLobby(){
+  const m = modal(`
+    <h2>🎴 GeoCard Battle Delta</h2>
+    <p>Introduce el código de la partida para empezar a cazar cartas.</p>
+    <input id="codeInput" placeholder="Código de Sala" style="width:80%;padding:10px;margin-bottom:10px;"><br>
+    <label>Elige tu bando:</label><br>
+    <button onclick="window.joinGame('red')" style="background:red;">Equipo Rojo 🔴</button>
+    <button onclick="window.joinGame('blue')" style="background:blue;">Equipo Azul 🔵</button>
+  `);
+}
+
+window.joinGame = async function(team){
+  const codeInput = document.getElementById("codeInput").value.trim().toUpperCase();
+  if(!codeInput){ swal("Introduce un código válido"); return; }
+  
+  STATE.roomCode = codeInput;
+  STATE.team = team;
+
+  document.querySelectorAll(".modal").forEach(el => el.remove());
+  document.getElementById("panel").style.display = "block";
+  
+  initMap();
+  loadGeocachesFromSupabase();
+  listenRoomChanges();
+};
+
+function initMap(){
+  if(STATE.mapInitialized) return;
+  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(STATE.map);
+  STATE.mapInitialized = true;
+}
+
+async function loadGeocachesFromSupabase(){
+  const { data, error } = await supabase
+    .from('geocaches')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false);
+
+  if(error) { console.error(error); return; }
+
+  data.forEach(cache => {
+    const cacheIcon = L.divIcon({
+      className: "cache-icon",
+      html: `<div class="cacheMarker">🎁</div>`,
+      iconSize: [30,30],
+      iconAnchor: [15,15]
+    });
+
+    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+
+    marker.on("click", async () => {
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+      if(distance > 50){
+        swal("Estás muy lejos", "Acércate a menos de 50 metros para reclamar esta carta.", "warning");
+        return;
+      }
+
+      // Reclamar geocache y otorgar carta
+      const { error: updateErr } = await supabase
+        .from('geocaches')
+        .update({ claimed: true, team: STATE.team })
+        .eq('id', cache.id);
+
+      if(updateErr){ swal("Error al reclamar"); return; }
+
+      // Guardar carta en el inventario del usuario
+      await supabase.from('player_cards').insert({
+        room_code: STATE.roomCode,
+        team: STATE.team,
+        user_email: STATE.user.email,
+        card_name: cache.card_name,
+        attack: cache.attack,
+        defense: cache.defense,
+        image_url: cache.image_url
+      });
+
+      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name} (Atq: ${cache.attack} / Def: ${cache.defense})`, "success");
+      STATE.map.removeLayer(marker);
+    });
+  });
+}
+
+function listenRoomChanges(){
+  supabase
+    .channel('room-channel')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
+      document.getElementById("redScore").innerText = payload.new.red_score;
+      document.getElementById("blueScore").innerText = payload.new.blue_score;
+    })
+    .subscribe();
+}
+
+document.getElementById("btnInventory").addEventListener("click", async () => {
+  const { data, error } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  if(error || !data.length){ swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); return; }
+
+  let html = `<h3>Tus Cartas Coleccionadas</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
+  data.forEach(card => {
+    html += `<div style="border:1px solid #ccc; padding:8px; margin:5px; border-radius:8px;">
+      <b>${card.card_name}</b><br>⚔️ Ataque: ${card.attack} | 🛡️ Defensa: ${card.defense}
+    </div>`;
+  });
+  html += `</div>`;
+  modal(html + `<br><button onclick="document.querySelector('.modal').remove()">Cerrar</button>`);
+});
+
+document.getElementById("btnExit").addEventListener("click", () => location.reload());
+
+// Arrancar app
+showLobby();
+</script>
+</body>
+</html>
