@@ -256,11 +256,13 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
 });
 
 // Botón de salir limpio que desconecta canales y recarga
+// Botón de salir que limpia la sesión y recarga de forma limpia
 document.getElementById("btnExit").addEventListener("click", () => {
   if (roomChannel) {
     supabase.removeChannel(roomChannel);
   }
-  window.location.reload();
+  // Limpiar cualquier rastro y recargar limpio la página
+  window.location.href = window.location.pathname;
 });
 
 // --- INICIALIZACIÓN AUTOMÁTICA ---
