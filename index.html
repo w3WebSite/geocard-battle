@@ -5,6 +5,8 @@
 <title>GeoCard Battle - Europa</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- Carga el archivo de configuración antes -->
+<script src="config.js"></script>
 <style>
 body{
   margin:0;
@@ -124,8 +126,8 @@ option { background: #0f172a; color: white; }
 /* =========================
    ⚙️ CONFIGURACIÓN SUPABASE Y CIUDADES
 ========================= */
-const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
+const SUPABASE_URL = window.SUPABASE_CONFIG.URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_CONFIG.ANON_KEY;
 
 const ADMIN_KEYWORD = "paraquelavols";
 
@@ -221,7 +223,6 @@ window.showHowToPlay = function(){
         <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad europea elegida. Acércate a menos de 50m de las cartas flotantes 🎴 para reclamarlas.</p>
         <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
         <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un rival del equipo contrario a menos de 30m, ¡se desatará un combate de estrategia a 3 rondas!</p>
-  
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
