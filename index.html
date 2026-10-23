@@ -135,6 +135,69 @@ function initMap(){
 }
 
 async function loadGeocachesFromSupabase(){
+  console.log("Cargando geocaches para la sala:", STATE.roomCode);
+  const { data, error } = await supabase
+    .from('geocaches')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false);
+
+  if(error) { console.error("Error cargando geocaches:", error); return; }
+  console.log("Geocaches encontrados:", data);
+
+  if(data.length === 0){
+    swal("Sin geocaches", "No hay cartas disponibles para esta sala (" + STATE.roomCode + ")", "info");
+    return;
+  }
+
+  const group = [];
+
+  data.forEach(cache => {
+    const cacheIcon = L.divIcon({
+      className: "cache-icon",
+      html: `<div class="cacheMarker">🎁</div>`,
+      iconSize: [30,30],
+      iconAnchor: [15,15]
+    });
+
+    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+    group.push(marker);
+
+    marker.on("click", async () => {
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+      if(distance > 50){
+        swal("Estás muy lejos", "Acércate a menos de 50 metros para reclamar esta carta.", "warning");
+        return;
+      }
+
+      const { error: updateErr } = await supabase
+        .from('geocaches')
+        .update({ claimed: true, team: STATE.team })
+        .eq('id', cache.id);
+
+      if(updateErr){ swal("Error al reclamar"); return; }
+
+      await supabase.from('player_cards').insert({
+        room_code: STATE.roomCode,
+        team: STATE.team,
+        user_email: STATE.user.email,
+        card_name: cache.card_name,
+        attack: cache.attack,
+        defense: cache.defense,
+        image_url: cache.image_url
+      });
+
+      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name} (Atq: ${cache.attack} / Def: ${cache.defense})`, "success");
+      STATE.map.removeLayer(marker);
+    });
+  });
+
+  // Enfocar el mapa automáticamente sobre todos los marcadores
+  if(group.length > 0){
+    const featureGroup = L.featureGroup(group);
+    STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
+  }
+}
   const { data, error } = await supabase
     .from('geocaches')
     .select('*')
