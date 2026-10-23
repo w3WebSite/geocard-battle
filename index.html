@@ -65,7 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
-const ADMIN_EMAIL = "paraquelavols";
+const ADMIN_EMAIL = "admin@geocard.com";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -180,9 +180,9 @@ window.startAdminGame = async function(){
   if(!code){ swal("Error", "El código de sala no puede estar vacío", "warning"); return; }
 
   STATE.roomCode = code;
-  STATE.team = "red"; // El admin puede unirse por defecto o elegir
+  STATE.team = "red";
 
-  // 1. Guardar la configuración oficial de la partida en Supabase
+  // 1. Crear o reiniciar la sala
   await supabase.from('rooms').upsert({
     code: STATE.roomCode,
     active: true,
@@ -191,15 +191,15 @@ window.startAdminGame = async function(){
     blue_score: 0
   });
 
-  // 2. Limpiar cartas antiguas de esta sala
+  // 2. BORRAR TODAS LAS CARTAS ANTIGUAS DE ESTA SALA EN SUPABASE
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
 
-  // 3. Generar cartas en el mapa
+  // 3. Generar ÚNICAMENTE la cantidad exacta pedida con mejor dispersión
   const newGeocaches = [];
   for(let i = 0; i < maxCards; i++){
     const template = CARD_POOL[i % CARD_POOL.length];
-    const offsetLat = (Math.random() - 0.5) * 0.015;
-    const offsetLng = (Math.random() - 0.5) * 0.015;
+    const offsetLat = (Math.random() - 0.5) * 0.025;
+    const offsetLng = (Math.random() - 0.5) * 0.025;
 
     newGeocaches.push({
       room_code: STATE.roomCode,
@@ -250,8 +250,7 @@ window.joinPlayerGame = async function(){
   STATE.roomCode = code;
   STATE.team = team;
 
-  // Consultar la duración configurada previamente por el Admin para esta sala
-  let durationMinutes = 60;
+  let durationMinutes = 30;
   const { data: roomData } = await supabase.from('rooms').select('duration').eq('code', STATE.roomCode).single();
   if(roomData && roomData.duration){
     durationMinutes = roomData.duration;
@@ -279,7 +278,7 @@ function launchGameEngine(durationMinutes){
 
 function initMap(){
   if(STATE.mapInitialized) return;
-  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 15);
+  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 14);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(STATE.map);
   STATE.mapInitialized = true;
 }
@@ -417,7 +416,7 @@ async function loadGeocachesFromSupabase(){
 
   if(group.length > 0){
     const featureGroup = L.featureGroup(group);
-    STATE.map.fitBounds(featureGroup.getBounds().pad(0.3));
+    STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
   }
 }
 
@@ -695,7 +694,7 @@ document.getElementById("btnExit").addEventListener("click", () => {
   window.location.reload();
 });
 
-// Arrancar mostrando la Pantalla de Login limpia
+// Arrancar mostrando el Login limpio
 showLoginScreen();
 </script>
 </body>
