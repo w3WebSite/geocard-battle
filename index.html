@@ -27,9 +27,13 @@ button{
   font-weight:bold; cursor:pointer; transition:0.2s;
 }
 button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
+.btn-enter{
+  background: linear-gradient(45deg, #2a9d8f, #e9c46a);
+  color: #073b4c; padding: 6px 10px; font-size: 11px; margin-left: 4px;
+}
 .btn-delete{
   background: linear-gradient(45deg, #e63946, #d62828);
-  padding: 4px 8px; font-size: 11px; margin-left: 8px;
+  color: white; padding: 6px 10px; font-size: 11px; margin-left: 4px;
 }
 .modal{
   position:fixed; inset:0; background:rgba(0,0,0,.7);
@@ -133,7 +137,7 @@ function showLoginScreen(){
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Delta</h2>
-      <p style="margin-bottom:5px; font-size:13px; color:#073b4c;"><b>Introduce tu Nick o Clave Admin:</b></p>
+      <p style="margin-bottom:5px; font-size:13px; color:#073b4c;"><b>Introduce tu Nick para jugar:</b></p>
       <input id="loginNick" value="${defaultNick}" placeholder="Tu Nick / Nombre"><br>
       <input id="playerRoomCode" value="" placeholder="Código de Sala"><br>
       <select id="playerTeamSelect">
@@ -193,7 +197,7 @@ window.processPlayerLogin = async function(){
 };
 
 /* ===================================================
-   👑 2. PANEL DEL ADMINISTRADOR (CON GESTOR DE SALAS)
+   👑 2. PANEL DEL ADMINISTRADOR (CON ENTRADA A SALAS)
 =================================================== */
 async function showAdminConfigScreen(){
   const modalDiv = document.createElement("div");
@@ -209,7 +213,10 @@ async function showAdminConfigScreen(){
       roomListHTML += `
         <div class="room-item">
           <span><b>${r.code}</b> (${r.duration} min)</span>
-          <button class="btn-delete" onclick="window.deleteRoom('${r.code}')">🗑️ Borrar</button>
+          <div>
+            <button class="btn-enter" onclick="window.adminEnterRoom('${r.code}', ${r.duration})">👁️ Entrar</button>
+            <button class="btn-delete" onclick="window.deleteRoom('${r.code}')">🗑️ Borrar</button>
+          </div>
         </div>
       `;
     });
@@ -240,6 +247,14 @@ async function showAdminConfigScreen(){
   `;
   document.body.appendChild(modalDiv);
 }
+
+// 👁️ Unirse a una sala existente como Admin
+window.adminEnterRoom = function(code, duration){
+  STATE.roomCode = code;
+  STATE.team = "red"; // Entra como Rojo por defecto
+  document.getElementById("adminModal").remove();
+  launchGameEngine(duration || 30);
+};
 
 window.deleteRoom = async function(codeToDelete){
   swal({
