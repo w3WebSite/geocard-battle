@@ -35,6 +35,10 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
   background: linear-gradient(45deg, #e63946, #d62828);
   color: white; padding: 6px 10px; font-size: 11px; margin-left: 4px;
 }
+.btn-secondary{
+  background: linear-gradient(45deg, #457b9d, #1d3557);
+  font-size: 13px; padding: 8px 12px;
+}
 .modal{
   position:fixed; inset:0; background:rgba(0,0,0,.7);
   display:flex; justify-content:center; align-items:center; z-index:2000; padding:20px;
@@ -114,7 +118,6 @@ const ADMIN_KEYWORD = "paraquelavols";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🌍 CIUDADES Y COORDENADAS BASE EUROPEAS
 const CITIES = {
   "deltebre": { name: "Deltebre (Delta del Ebro)", lat: 40.7164, lng: 0.7365 },
   "barcelona": { name: "Barcelona", lat: 41.3851, lng: 2.1734 },
@@ -168,7 +171,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 /* ===================================================
-   🔐 1. PANTALLA DE ENTRADA
+   🔐 1. PANTALLA DE ENTRADA CON TUTORIAL "CÓMO JUGAR"
 =================================================== */
 function showLoginScreen(){
   const defaultNick = "Jugador_" + Math.floor(Math.random() * 900 + 100);
@@ -186,11 +189,33 @@ function showLoginScreen(){
         <option value="red">Equipo Rojo 🔴</option>
         <option value="blue">Equipo Azul 🔵</option>
       </select><br><br>
-      <button onclick="window.processPlayerLogin()" style="width:90%;">Entrar al Juego 🚀</button>
+      <button onclick="window.processPlayerLogin()" style="width:90%;">Entrar al Juego 🚀</button><br>
+      <button onclick="window.showHowToPlay()" class="btn-secondary" style="width:90%;">❓ ¿Cómo Jugar?</button>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
+
+// 📖 Ventana modal de instrucciones
+window.showHowToPlay = function(){
+  const helpModal = document.createElement("div");
+  helpModal.className = "modal";
+  helpModal.id = "helpModal";
+  helpModal.innerHTML = `
+    <div>
+      <h2>📜 Guía de Supervivencia</h2>
+      <div style="text-align: left; font-size: 13px; color: #073b4c; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
+        <p><b>1. 🎮 Acceso por Nick:</b> Escribe tu apodo y el código de sala proporcionado por el Administrador para unirte a la partida.</p>
+        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad seleccionada. Verás cartas holográficas flotando 🎴. Acércate a menos de 50 metros para reclamarlas.</p>
+        <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida en el mapa, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
+        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un jugador del equipo rival a menos de 30 metros, ¡se desatará un combate estratégico a 3 rondas!</p>
+        <p><b>5. 👑 Modo Administrador:</b> Introduce la clave de admin en el campo de Nick para crear salas, elegir ciudades europeas y gestionar partidas.</p>
+      </div><br>
+      <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
+    </div>
+  `;
+  document.body.appendChild(helpModal);
+};
 
 window.processPlayerLogin = async function(){
   const nickInput = document.getElementById("loginNick").value.trim();
@@ -345,7 +370,6 @@ window.startAdminGame = async function(){
   STATE.roomCode = code;
   STATE.team = "red";
 
-  // 🛠️ CORRECCIÓN: Guardar en rooms sin requerir la columna city si no existe en la BD
   await supabase.from('rooms').upsert({
     code: STATE.roomCode,
     active: true,
