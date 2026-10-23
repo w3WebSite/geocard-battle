@@ -126,8 +126,9 @@ option { background: #0f172a; color: white; }
 /* =========================
    ⚙️ CONFIGURACIÓN SUPABASE Y CIUDADES
 ========================= */
-const SUPABASE_URL = window.SUPABASE_CONFIG.URL;
-const SUPABASE_ANON_KEY = window.SUPABASE_CONFIG.ANON_KEY;
+// Si existe window.SUPABASE_CONFIG (en local), lo usa. Si no, usa valores directos seguros para producción en Vercel
+const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) ? window.SUPABASE_CONFIG.URL : "https://muscayxltwpxsksnwikn.supabase.co";
+const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) ? window.SUPABASE_CONFIG.ANON_KEY : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
 const ADMIN_KEYWORD = "paraquelavols";
 
