@@ -33,9 +33,10 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
 }
 .modal > div{
   background:rgba(255,255,255,0.95); color:#073b4c; padding:30px;
-  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:500px; text-align:center;
+  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:450px; text-align:center;
 }
 .cacheMarker{ font-size:24px; filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
+input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
@@ -44,12 +45,11 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
 <div id="panel">
   <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>
   <div style="font-size: 13px; margin: 4px 0;">👥 En línea: <span id="onlineCount">1</span></div>
-  <div><span id="livesPanel"></span></div>
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
-<button id="btnExit">Salir</button>
-<h2>Tiempo restante: <span id="timer">00:00</span></h2>
+<button id="btnExit" style="display:none;">Salir</button>
+<h2 id="timerContainer" style="display:none;">Tiempo restante: <span id="timer">00:00</span></h2>
 <div id="map"></div>
 
 <!-- Leaflet JS -->
@@ -69,9 +69,9 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STATE = {
   user: { email: "jugador_" + Math.floor(Math.random() * 1000) + "@game.com" },
-  roomCode: "TEST1",
-  team: "red",
-  lives: 3,
+  roomCode: null,
+  team: null,
+  isAdmin: false,
   map: null,
   mapInitialized: false,
   userLat: 40.7164,
@@ -80,6 +80,7 @@ const STATE = {
 
 let playerMarkers = {};
 let roomChannel = null;
+let timerInterval = null;
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -88,6 +89,74 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
+
+function showLobby(){
+  const modalDiv = document.createElement("div");
+  modalDiv.className = "modal";
+  modalDiv.id = "lobbyModal";
+  modalDiv.innerHTML = `
+    <div>
+      <h2>🎴 GeoCard Battle Delta</h2>
+      <p>Introduce el código de sala y bando</p>
+      <input id="codeInput" value="TEST1" placeholder="Código de Sala"><br>
+      <select id="teamSelect">
+        <option value="red">Equipo Rojo 🔴</option>
+        <option value="blue">Equipo Azul 🔵</option>
+      </select><br>
+      <div style="margin: 10px 0; text-align: left; padding-left: 30px;">
+        <input type="checkbox" id="adminCheck" onchange="toggleAdminOptions()"> <b>Modo Administrador</b>
+      </div>
+      <div id="adminOptions" style="display:none; background:#f0f4f8; padding:10px; border-radius:8px; margin-bottom:10px;">
+        <label style="font-size:12px; color:#073b4c;">Tiempo de partida (minutos):</label><br>
+        <input type="number" id="gameDuration" value="60" style="width:50%"><br>
+        <label style="font-size:12px; color:#073b4c;">Cartas máximas en mapa:</label><br>
+        <input type="number" id="maxCards" value="10" style="width:50%">
+      </div>
+      <button onclick="window.joinGame()" style="width:90%;">Entrar al Juego 🚀</button>
+    </div>
+  `;
+  document.body.appendChild(modalDiv);
+}
+
+window.toggleAdminOptions = function(){
+  const isAdmin = document.getElementById("adminCheck").checked;
+  document.getElementById("adminOptions").style.display = isAdmin ? "block" : "none";
+}
+
+window.joinGame = async function(){
+  const code = document.getElementById("codeInput").value.trim().toUpperCase();
+  const team = document.getElementById("teamSelect").value;
+  const isAdmin = document.getElementById("adminCheck").checked;
+
+  if(!code){ swal("Error", "Introduce un código de sala válido", "warning"); return; }
+
+  STATE.roomCode = code;
+  STATE.team = team;
+  STATE.isAdmin = isAdmin;
+
+  if(isAdmin){
+    const duration = parseInt(document.getElementById("gameDuration").value) || 60;
+    // Guardar configuración de sala en Supabase
+    await supabase.from('rooms').upsert({
+      code: STATE.roomCode,
+      active: true,
+      duration: duration,
+      red_score: 0,
+      blue_score: 0
+    });
+  }
+
+  document.getElementById("lobbyModal").remove();
+  document.getElementById("panel").style.display = "block";
+  document.getElementById("btnExit").style.display = "inline-block";
+  document.getElementById("timerContainer").style.display = "block";
+
+  initMap();
+  loadGeocachesFromSupabase();
+  listenRoomChanges();
+  setupRealtimePresence();
+  startTimer(60 * 60); // Iniciar temporizador predeterminado
+};
 
 function initMap(){
   if(STATE.mapInitialized) return;
@@ -103,15 +172,10 @@ async function loadGeocachesFromSupabase(){
     .eq('room_code', STATE.roomCode)
     .eq('claimed', false);
 
-  if(error) { 
-    console.error("Error al consultar Supabase:", error); 
-    return; 
-  }
-
+  if(error) { console.error(error); return; }
   if(!data || data.length === 0) return;
 
   const group = [];
-
   data.forEach(cache => {
     const cacheIcon = L.divIcon({
       className: "cache-icon",
@@ -158,6 +222,25 @@ async function loadGeocachesFromSupabase(){
   }
 }
 
+function startTimer(durationSeconds){
+  let timer = durationSeconds;
+  const display = document.getElementById("timer");
+  timerInterval = setInterval(() => {
+    let minutes = parseInt(timer / 60, 10);
+    let seconds = parseInt(timer % 60, 10);
+
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    display.textContent = minutes + ":" + seconds;
+
+    if (--timer < 0) {
+      clearInterval(timerInterval);
+      swal("Partida Finalizada", "El tiempo de juego ha terminado.", "info");
+    }
+  }, 1000);
+}
+
 function listenRoomChanges(){
   supabase
     .channel('room-channel')
@@ -192,7 +275,6 @@ function setupRealtimePresence() {
 
 function updatePlayerMarkers(presenceState) {
   let totalPlayers = 0;
-  
   Object.keys(playerMarkers).forEach(email => {
     if (!presenceState[email]) {
       STATE.map.removeLayer(playerMarkers[email]);
@@ -255,22 +337,15 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
   document.body.appendChild(div);
 });
 
-// Botón de salir limpio que desconecta canales y recarga
-// Botón de salir que limpia la sesión y recarga de forma limpia
+// Botón de salir limpio que regresa al lobby principal
 document.getElementById("btnExit").addEventListener("click", () => {
-  if (roomChannel) {
-    supabase.removeChannel(roomChannel);
-  }
-  // Limpiar cualquier rastro y recargar limpio la página
-  window.location.href = window.location.pathname;
+  if (roomChannel) supabase.removeChannel(roomChannel);
+  if (timerInterval) clearInterval(timerInterval);
+  window.location.reload();
 });
 
-// --- INICIALIZACIÓN AUTOMÁTICA ---
-document.getElementById("panel").style.display = "block";
-initMap();
-loadGeocachesFromSupabase();
-listenRoomChanges();
-setupRealtimePresence();
+// Arrancar mostrando el Lobby inicial
+showLobby();
 </script>
 </body>
 </html>
