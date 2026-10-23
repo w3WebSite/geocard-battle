@@ -65,8 +65,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
-// 📧 CORREO AUTORIZADO COMO ADMINISTRADOR
-const ADMIN_EMAIL = "motar3000@gmail.com";
+const ADMIN_EMAIL = "admin@geocard.com";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -100,6 +99,9 @@ const CARD_POOL = [
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
+
+// Registro de cooldown para duelos con otros jugadores { email: timestamp }
+let battleCooldowns = {};
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -232,9 +234,6 @@ function initMap(){
   STATE.mapInitialized = true;
 }
 
-/* ===================================
-   📍 GEOLOCALIZACIÓN Y CÍRCULO EN VIVO
-=================================== */
 function startGeolocationTracking(){
   if ("geolocation" in navigator) {
     STATE.watchPositionId = navigator.geolocation.watchPosition(
@@ -265,7 +264,6 @@ function updateUserPositionOnMap(){
     iconAnchor: [10, 10]
   });
 
-  // 1. Actualizar o crear marcador del jugador actual
   if(STATE.userMarker){
     STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
   } else {
@@ -273,7 +271,6 @@ function updateUserPositionOnMap(){
     STATE.userMarker.bindPopup("<b>¡Tú estás aquí!</b>");
   }
 
-  // 2. Actualizar o crear círculo de rango de captura (50 metros)
   if(STATE.rangeCircle){
     STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
   } else {
@@ -281,11 +278,10 @@ function updateUserPositionOnMap(){
       color: color,
       fillColor: color,
       fillOpacity: 0.15,
-      radius: 50 // Radio de 50 metros para interactuar con las cartas
+      radius: 50
     }).addTo(STATE.map);
   }
 
-  // 3. Notificar la nueva posición por Realtime Presence
   if(roomChannel){
     roomChannel.track({
       lat: STATE.userLat,
@@ -340,146 +336,4 @@ async function loadGeocachesFromSupabase(){
         card_name: cache.card_name,
         attack: cache.attack,
         defense: cache.defense,
-        image_url: cache.image_url
-      });
-
-      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name}`, "success");
-      STATE.map.removeLayer(marker);
-    });
-  });
-
-  if(group.length > 0){
-    const featureGroup = L.featureGroup(group);
-    STATE.map.fitBounds(featureGroup.getBounds().pad(0.3));
-  }
-}
-
-function startTimer(durationSeconds){
-  if(timerInterval) clearInterval(timerInterval);
-  let timer = durationSeconds;
-  const display = document.getElementById("timer");
-  timerInterval = setInterval(() => {
-    let minutes = parseInt(timer / 60, 10);
-    let seconds = parseInt(timer % 60, 10);
-
-    minutes = minutes < 10 ? "0" + minutes : minutes;
-    seconds = seconds < 10 ? "0" + seconds : seconds;
-
-    display.textContent = minutes + ":" + seconds;
-
-    if (--timer < 0) {
-      clearInterval(timerInterval);
-      swal("Partida Finalizada", "El tiempo de juego ha terminado.", "info");
-    }
-  }, 1000);
-}
-
-function listenRoomChanges(){
-  supabase
-    .channel('room-channel')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      if(payload.new.red_score !== undefined) document.getElementById("redScore").innerText = payload.new.red_score;
-      if(payload.new.blue_score !== undefined) document.getElementById("blueScore").innerText = payload.new.blue_score;
-    })
-    .subscribe();
-}
-
-function setupRealtimePresence() {
-  roomChannel = supabase.channel(`room-presence-${STATE.roomCode}`, {
-    config: { presence: { key: STATE.user.email } }
-  });
-
-  roomChannel
-    .on('presence', { event: 'sync' }, () => {
-      const state = roomChannel.presenceState();
-      updatePlayerMarkers(state);
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await roomChannel.track({
-          lat: STATE.userLat,
-          lng: STATE.userLng,
-          team: STATE.team,
-          online_at: new Date().toISOString()
-        });
-      }
-    });
-}
-
-function updatePlayerMarkers(presenceState) {
-  let totalPlayers = 0;
-  Object.keys(playerMarkers).forEach(email => {
-    if (!presenceState[email]) {
-      STATE.map.removeLayer(playerMarkers[email]);
-      delete playerMarkers[email];
-    }
-  });
-
-  Object.keys(presenceState).forEach(email => {
-    const playerDatas = presenceState[email];
-    totalPlayers += playerDatas.length;
-    
-    playerDatas.forEach(data => {
-      if (email === STATE.user.email) return;
-
-      const color = data.team === 'red' ? '#e63946' : '#1d3557';
-      const playerIcon = L.divIcon({
-        className: "player-icon",
-        html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      });
-
-      if (playerMarkers[email]) {
-        playerMarkers[email].setLatLng([data.lat, data.lng]);
-      } else {
-        const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-        marker.bindPopup(`Jugador (${data.team.toUpperCase()})`);
-        playerMarkers[email] = marker;
-      }
-    });
-  });
-
-  const onlineEl = document.getElementById("onlineCount");
-  if(onlineEl) onlineEl.innerText = totalPlayers;
-}
-
-document.getElementById("btnInventory").addEventListener("click", async () => {
-  const { data, error } = await supabase
-    .from('player_cards')
-    .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('user_email', STATE.user.email);
-
-  if(error || !data || !data.length){ 
-    swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); 
-    return; 
-  }
-
-  let html = `<h3>Tus Cartas Coleccionadas</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
-  data.forEach(card => {
-    html += `<div style="border:1px solid #ccc; padding:8px; margin:5px; border-radius:8px;">
-      <b>${card.card_name}</b><br>⚔️ Ataque: ${card.attack} | 🛡️ Defensa: ${card.defense}
-    </div>`;
-  });
-  html += `</div>`;
-  
-  const div = document.createElement("div");
-  div.className = "modal";
-  div.innerHTML = `<div>${html}<br><button onclick="this.closest('.modal').remove()">Cerrar</button></div>`;
-  document.body.appendChild(div);
-});
-
-// Botón de salir que detiene la geolocalización y recarga
-document.getElementById("btnExit").addEventListener("click", () => {
-  if (STATE.watchPositionId) navigator.geolocation.clearWatch(STATE.watchPositionId);
-  if (roomChannel) supabase.removeChannel(roomChannel);
-  if (timerInterval) clearInterval(timerInterval);
-  window.location.reload();
-});
-
-// Arrancar el Lobby
-showLobby();
-</script>
-</body>
-</html>
+        image_url:
