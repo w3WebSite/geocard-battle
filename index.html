@@ -336,4 +336,223 @@ async function loadGeocachesFromSupabase(){
         card_name: cache.card_name,
         attack: cache.attack,
         defense: cache.defense,
-        image_url:
+        image_url: cache.image_url
+      });
+
+      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name}`, "success");
+      STATE.map.removeLayer(marker);
+    });
+  });
+
+  if(group.length > 0){
+    const featureGroup = L.featureGroup(group);
+    STATE.map.fitBounds(featureGroup.getBounds().pad(0.3));
+  }
+}
+
+/* ===================================
+   ⚔️ SISTEMA DE BATALLA PVP Y PROXIMIDAD
+=================================== */
+function updatePlayerMarkers(presenceState) {
+  let totalPlayers = 0;
+  const now = Date.now();
+
+  Object.keys(playerMarkers).forEach(email => {
+    if (!presenceState[email]) {
+      STATE.map.removeLayer(playerMarkers[email]);
+      delete playerMarkers[email];
+    }
+  });
+
+  Object.keys(presenceState).forEach(email => {
+    const playerDatas = presenceState[email];
+    totalPlayers += playerDatas.length;
+    
+    playerDatas.forEach(data => {
+      if (email === STATE.user.email) return;
+
+      const color = data.team === 'red' ? '#e63946' : '#1d3557';
+      const playerIcon = L.divIcon({
+        className: "player-icon",
+        html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+
+      if (playerMarkers[email]) {
+        playerMarkers[email].setLatLng([data.lat, data.lng]);
+      } else {
+        const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
+        marker.bindPopup(`Jugador (${data.team.toUpperCase()})`);
+        playerMarkers[email] = marker;
+      }
+
+      // --- DETECTAR PROXIMIDAD DE COMBATE (Si es enemigo y está a menos de 30m) ---
+      if(data.team !== STATE.team) {
+        const distanceToEnemy = getDistanceInMeters(STATE.userLat, STATE.userLng, data.lat, data.lng);
+        const lastBattle = battleCooldowns[email] || 0;
+
+        // Si están a menos de 30m y han pasado más de 2 minutos (120000 ms) desde la última batalla
+        if(distanceToEnemy <= 30 && (now - lastBattle > 120000)){
+          battleCooldowns[email] = now; // Activar enfriamiento
+          triggerPvPBattle(email, data.team);
+        }
+      }
+    });
+  });
+
+  const onlineEl = document.getElementById("onlineCount");
+  if(onlineEl) onlineEl.innerText = totalPlayers;
+}
+
+async function triggerPvPBattle(enemyEmail, enemyTeam) {
+  // Obtener las cartas del jugador actual
+  const { data: myCards } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  let cardOptions = "";
+  if(myCards && myCards.length > 0) {
+    myCards.forEach((c, index) => {
+      cardOptions += `<option value="${index}">${c.card_name} (⚔️${c.attack} | 🛡️${c.defense})</option>`;
+    });
+  } else {
+    cardOptions = `<option value="-1">Sin cartas (Carta Básica ⚔️10 | 🛡️10)</option>`;
+  }
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.innerHTML = `
+    <div>
+      <h2>⚔️ ¡ENCUENTRO ENEMIGO DETECTADO!</h2>
+      <p>Un jugador del equipo <b>${enemyTeam.toUpperCase()}</b> está muy cerca de ti.</p>
+      <p>Elige tu carta para el duelo:</p>
+      <select id="battleCardSelect">${cardOptions}</select><br><br>
+      <button onclick="window.startBattleResolution('${enemyEmail}', '${enemyTeam}')">¡Luchar Ahora! 💥</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  window.startBattleResolution = async function(eEmail, eTeam) {
+    const selectedIdx = parseInt(document.getElementById("battleCardSelect").value);
+    let myPower = 20; // Poder base
+    let chosenName = "Carta Básica";
+
+    if(selectedIdx >= 0 && myCards[selectedIdx]) {
+      const card = myCards[selectedIdx];
+      myPower = card.attack + card.defense;
+      chosenName = card.card_name;
+    }
+
+    // Generar un poder aleatorio del rival para resolver el combate en tiempo real
+    const enemyPower = Math.floor(Math.random() * 80) + 40;
+    modal.remove();
+
+    if(myPower >= enemyPower) {
+      swal("¡VICTORIA EN DUELO! 🏆", `Tu ${chosenName} (${myPower} pts) ha derrotado al rival (${enemyPower} pts). ¡Has sumado +100 puntos para tu equipo!`, "success");
+      
+      // Añadir +100 puntos al bando en Supabase
+      const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
+      const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
+      if(currentRoom) {
+        const newScore = (currentRoom[scoreKey] || 0) + 100;
+        await supabase.from('rooms').update({ [scoreKey]: newScore }).eq('code', STATE.roomCode);
+      }
+    } else {
+      swal("DERROTA EN DUELO 💔", `Tu ${chosenName} (${myPower} pts) fue superada por la carta rival (${enemyPower} pts). ¡Sigue buscando mejores cartas!`, "error");
+    }
+  };
+}
+
+function startTimer(durationSeconds){
+  if(timerInterval) clearInterval(timerInterval);
+  let timer = durationSeconds;
+  const display = document.getElementById("timer");
+  timerInterval = setInterval(() => {
+    let minutes = parseInt(timer / 60, 10);
+    let seconds = parseInt(timer % 60, 10);
+
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    display.textContent = minutes + ":" + seconds;
+
+    if (--timer < 0) {
+      clearInterval(timerInterval);
+      swal("Partida Finalizada", "El tiempo de juego ha terminado.", "info");
+    }
+  }, 1000);
+}
+
+function listenRoomChanges(){
+  supabase
+    .channel('room-channel')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
+      if(payload.new.red_score !== undefined) document.getElementById("redScore").innerText = payload.new.red_score;
+      if(payload.new.blue_score !== undefined) document.getElementById("blueScore").innerText = payload.new.blue_score;
+    })
+    .subscribe();
+}
+
+function setupRealtimePresence() {
+  roomChannel = supabase.channel(`room-presence-${STATE.roomCode}`, {
+    config: { presence: { key: STATE.user.email } }
+  });
+
+  roomChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = roomChannel.presenceState();
+      updatePlayerMarkers(state);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await roomChannel.track({
+          lat: STATE.userLat,
+          lng: STATE.userLng,
+          team: STATE.team,
+          online_at: new Date().toISOString()
+        });
+      }
+    });
+}
+
+document.getElementById("btnInventory").addEventListener("click", async () => {
+  const { data, error } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  if(error || !data || !data.length){ 
+    swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); 
+    return; 
+  }
+
+  let html = `<h3>Tus Cartas Coleccionadas</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
+  data.forEach(card => {
+    html += `<div style="border:1px solid #ccc; padding:8px; margin:5px; border-radius:8px;">
+      <b>${card.card_name}</b><br>⚔️ Ataque: ${card.attack} | 🛡️ Defensa: ${card.defense}
+    </div>`;
+  });
+  html += `</div>`;
+  
+  const div = document.createElement("div");
+  div.className = "modal";
+  div.innerHTML = `<div>${html}<br><button onclick="this.closest('.modal').remove()">Cerrar</button></div>`;
+  document.body.appendChild(div);
+});
+
+document.getElementById("btnExit").addEventListener("click", () => {
+  if (STATE.watchPositionId) navigator.geolocation.clearWatch(STATE.watchPositionId);
+  if (roomChannel) supabase.removeChannel(roomChannel);
+  if (timerInterval) clearInterval(timerInterval);
+  window.location.reload();
+});
+
+// Arrancar el Lobby
+showLobby();
+</script>
+</body>
+</html>
