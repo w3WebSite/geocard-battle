@@ -62,27 +62,20 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
    ⚙️ CONFIGURACIÓN SUPABASE
 ========================= */
 const SUPABASE_URL = "https://muscayxltwpxsksnwikn.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28"; // Pega la clave anon completa aquí
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11c2NheXhsdHdweHNrc253aWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ2OTgsImV4cCI6MjEwMjU4MDY5OH0.EAHppVvlIhUisOjRWehZhtK0FRfzw85h7TmT_fKuK28";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STATE = {
   user: { email: "jugador_" + Math.floor(Math.random() * 1000) + "@game.com" },
-  roomCode: null,
-  team: null,
+  roomCode: "TEST1",
+  team: "red",
   lives: 3,
   map: null,
   mapInitialized: false,
   userLat: 40.7164,
   userLng: 0.7365
 };
-
-const SAMPLE_CARDS = [
-  { name: "Guerrero de Arrozal", type: "Tierra", attack: 45, defense: 30, image: "🌾" },
-  { name: "Furtivo del Fangar", type: "Agua", attack: 60, defense: 20, image: "🌊" },
-  { name: "Flamenco Real", type: "Aire", attack: 50, defense: 40, image: "🦩" },
-  { name: "Cangrejo Azul Gigante", type: "Agua", attack: 70, defense: 50, image: "🦀" }
-];
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -92,41 +85,6 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
 
-function modal(html){
-  const div = document.createElement("div");
-  div.className = "modal";
-  div.innerHTML = `<div>${html}</div>`;
-  document.body.appendChild(div);
-  return div;
-}
-
-// Pantalla inicial para introducir código de sala y elegir equipo
-function showLobby(){
-  const m = modal(`
-    <h2>🎴 GeoCard Battle Delta</h2>
-    <p>Introduce el código de la partida para empezar a cazar cartas.</p>
-    <input id="codeInput" placeholder="Código de Sala" style="width:80%;padding:10px;margin-bottom:10px;"><br>
-    <label>Elige tu bando:</label><br>
-    <button onclick="window.joinGame('red')" style="background:red;">Equipo Rojo 🔴</button>
-    <button onclick="window.joinGame('blue')" style="background:blue;">Equipo Azul 🔵</button>
-  `);
-}
-
-window.joinGame = async function(team){
-  const codeInput = document.getElementById("codeInput").value.trim().toUpperCase();
-  if(!codeInput){ swal("Introduce un código válido"); return; }
-  
-  STATE.roomCode = codeInput;
-  STATE.team = team;
-
-  document.querySelectorAll(".modal").forEach(el => el.remove());
-  document.getElementById("panel").style.display = "block";
-  
-  initMap();
-  loadGeocachesFromSupabase();
-  listenRoomChanges();
-};
-
 function initMap(){
   if(STATE.mapInitialized) return;
   STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 14);
@@ -135,18 +93,23 @@ function initMap(){
 }
 
 async function loadGeocachesFromSupabase(){
-  console.log("Cargando geocaches para la sala:", STATE.roomCode);
+  console.log("Cargando geocaches para sala:", STATE.roomCode);
+
   const { data, error } = await supabase
     .from('geocaches')
     .select('*')
     .eq('room_code', STATE.roomCode)
     .eq('claimed', false);
 
-  if(error) { console.error("Error cargando geocaches:", error); return; }
-  console.log("Geocaches encontrados:", data);
+  if(error) { 
+    console.error("Error al consultar Supabase:", error); 
+    return; 
+  }
 
-  if(data.length === 0){
-    swal("Sin geocaches", "No hay cartas disponibles para esta sala (" + STATE.roomCode + ")", "info");
+  console.log("Geocaches recibidos:", data);
+
+  if(!data || data.length === 0){
+    console.warn("No hay cartas registradas para esta sala.");
     return;
   }
 
@@ -187,73 +150,24 @@ async function loadGeocachesFromSupabase(){
         image_url: cache.image_url
       });
 
-      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name} (Atq: ${cache.attack} / Def: ${cache.defense})`, "success");
+      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name}`, "success");
       STATE.map.removeLayer(marker);
     });
   });
 
-  // Enfocar el mapa automáticamente sobre todos los marcadores
+  // Centrar el mapa donde están las cartas automáticamente
   if(group.length > 0){
     const featureGroup = L.featureGroup(group);
-    STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
+    STATE.map.fitBounds(featureGroup.getBounds().pad(0.3));
   }
-}
-  const { data, error } = await supabase
-    .from('geocaches')
-    .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('claimed', false);
-
-  if(error) { console.error(error); return; }
-
-  data.forEach(cache => {
-    const cacheIcon = L.divIcon({
-      className: "cache-icon",
-      html: `<div class="cacheMarker">🎁</div>`,
-      iconSize: [30,30],
-      iconAnchor: [15,15]
-    });
-
-    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
-
-    marker.on("click", async () => {
-      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-      if(distance > 50){
-        swal("Estás muy lejos", "Acércate a menos de 50 metros para reclamar esta carta.", "warning");
-        return;
-      }
-
-      // Reclamar geocache y otorgar carta
-      const { error: updateErr } = await supabase
-        .from('geocaches')
-        .update({ claimed: true, team: STATE.team })
-        .eq('id', cache.id);
-
-      if(updateErr){ swal("Error al reclamar"); return; }
-
-      // Guardar carta en el inventario del usuario
-      await supabase.from('player_cards').insert({
-        room_code: STATE.roomCode,
-        team: STATE.team,
-        user_email: STATE.user.email,
-        card_name: cache.card_name,
-        attack: cache.attack,
-        defense: cache.defense,
-        image_url: cache.image_url
-      });
-
-      swal("¡Carta Conseguida! 🎴", `Has obtenido: ${cache.card_name} (Atq: ${cache.attack} / Def: ${cache.defense})`, "success");
-      STATE.map.removeLayer(marker);
-    });
-  });
 }
 
 function listenRoomChanges(){
   supabase
     .channel('room-channel')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      document.getElementById("redScore").innerText = payload.new.red_score;
-      document.getElementById("blueScore").innerText = payload.new.blue_score;
+      if(payload.new.red_score !== undefined) document.getElementById("redScore").innerText = payload.new.red_score;
+      if(payload.new.blue_score !== undefined) document.getElementById("blueScore").innerText = payload.new.blue_score;
     })
     .subscribe();
 }
@@ -265,7 +179,10 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
     .eq('room_code', STATE.roomCode)
     .eq('user_email', STATE.user.email);
 
-  if(error || !data.length){ swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); return; }
+  if(error || !data || !data.length){ 
+    swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); 
+    return; 
+  }
 
   let html = `<h3>Tus Cartas Coleccionadas</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
   data.forEach(card => {
@@ -274,13 +191,20 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
     </div>`;
   });
   html += `</div>`;
-  modal(html + `<br><button onclick="document.querySelector('.modal').remove()">Cerrar</button>`);
+  
+  const div = document.createElement("div");
+  div.className = "modal";
+  div.innerHTML = `<div>${html}<br><button onclick="this.closest('.modal').remove()">Cerrar</button></div>`;
+  document.body.appendChild(div);
 });
 
 document.getElementById("btnExit").addEventListener("click", () => location.reload());
 
-// Arrancar app
-showLobby();
+// --- INICIALIZACIÓN AUTOMÁTICA ---
+document.getElementById("panel").style.display = "block";
+initMap();
+loadGeocachesFromSupabase();
+listenRoomChanges();
 </script>
 </body>
 </html>
