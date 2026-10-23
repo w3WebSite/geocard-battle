@@ -10,23 +10,26 @@ body{
   margin:0;
   font-family: 'Trebuchet MS', Arial, sans-serif;
   color:white;
-  background: linear-gradient(rgba(0, 70, 60, 0.65), rgba(0, 120, 150, 0.45)), url("https://i.ibb.co/DD9h8GS9/Deltebre-Faro-del-Fangar.webp");
-  background-size:cover;
-  background-position:center;
-  background-attachment:fixed;
+  /* 🌌 NUEVO FONDO CINEMÁTICO TÁCTICO EUROPEO CON PROFUNDIDAD */
+  background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)), 
+              url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
-#map{ height:500px; width:100%; margin-top:20px; }
+#map{ height:500px; width:100%; margin-top:20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 #panel{
-  position:fixed; top:15px; right:15px; background:rgba(255,255,255,0.9);
-  color:#073b4c; padding:14px 18px; border-radius:14px; z-index:500;
-  display:none; box-shadow:0 8px 20px rgba(0,0,0,0.2); font-weight:bold;
+  position:fixed; top:15px; right:15px; background:rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px); color:white; padding:14px 18px; border-radius:14px; z-index:500;
+  display:none; box-shadow:0 8px 25px rgba(0,0,0,0.4); font-weight:bold; border: 1px solid rgba(255,255,255,0.1);
 }
 button{
   margin:6px; padding:12px 16px; border:none; border-radius:12px;
   background:linear-gradient(45deg,#2a9d8f,#1d3557); color:white;
   font-weight:bold; cursor:pointer; transition:0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
+button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
 .btn-enter{
   background: linear-gradient(45deg, #2a9d8f, #e9c46a);
   color: #073b4c; padding: 6px 10px; font-size: 11px; margin-left: 4px;
@@ -40,21 +43,24 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
   font-size: 13px; padding: 8px 12px;
 }
 .modal{
-  position:fixed; inset:0; background:rgba(0,0,0,.7);
+  position:fixed; inset:0; background:rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
   display:flex; justify-content:center; align-items:center; z-index:2000; padding:20px;
 }
 .modal > div{
-  background:rgba(255,255,255,0.95); color:#073b4c; padding:30px;
-  border-radius:20px; box-shadow:0 20px 40px rgba(0,0,0,0.3); max-width:500px; text-align:center;
-  max-height:85vh; overflow-y:auto;
+  background:rgba(15, 23, 42, 0.92); backdrop-filter: blur(15px);
+  color:white; padding:30px; border-radius:20px; 
+  box-shadow: 0 25px 50px rgba(0,0,0,0.7), 0 0 20px rgba(42, 157, 143, 0.3); 
+  max-width:500px; text-align:center; max-height:85vh; overflow-y:auto;
+  border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* 🗺️ FILTRO DE VIDEOJUEGO / MODO TÁCTICO PARA EL MAPA */
+/* 🗺️ FILTRO TÁCTICO MODERNO PARA EL MAPA */
 .leaflet-tile-pane {
-  filter: brightness(0.8) contrast(1.15) saturate(0.9) hue-rotate(10deg);
+  filter: brightness(0.75) contrast(1.2) saturate(0.85) hue-rotate(15deg);
 }
 
-/* 🎴 MARCADOR MODERNO DE CARTAS HOLOGRÁFICAS */
+/* 🎴 MARCADOR HOLOGRÁFICO DE CARTAS */
 .modernCardMarker {
   width: 36px;
   height: 48px;
@@ -81,10 +87,17 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.25); }
   50% { transform: translateY(-6px); }
 }
 
-input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
+input, select{ 
+  width:80%; padding:10px; margin:8px 0; border-radius:8px; 
+  border:1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
+}
+input::placeholder { color: rgba(255,255,255,0.5); }
+option { background: #0f172a; color: white; }
+
 .room-item{
-  background: #f0f4f8; padding: 10px; margin: 6px 0; border-radius: 8px;
+  background: rgba(255,255,255,0.06); padding: 10px; margin: 6px 0; border-radius: 8px;
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
@@ -98,7 +111,7 @@ input, select{ width:80%; padding:10px; margin:8px 0; border-radius:8px; border:
 </div>
 
 <button id="btnExit" style="display:none;">Salir</button>
-<h2 id="timerContainer" style="display:none;">Tiempo restante: <span id="timer">00:00</span></h2>
+<h2 id="timerContainer" style="display:none; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">Tiempo restante: <span id="timer">00:00</span></h2>
 <div id="map"></div>
 
 <!-- Leaflet JS -->
@@ -171,7 +184,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 /* ===================================================
-   🔐 1. PANTALLA DE ENTRADA CON TUTORIAL "CÓMO JUGAR"
+   🔐 1. PANTALLA DE ENTRADA CON ESTÉTICA CINEMÁTICA
 =================================================== */
 function showLoginScreen(){
   const defaultNick = "Jugador_" + Math.floor(Math.random() * 900 + 100);
@@ -182,7 +195,7 @@ function showLoginScreen(){
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Europa</h2>
-      <p style="margin-bottom:5px; font-size:13px; color:#073b4c;"><b>Introduce tu Nick o Clave Admin:</b></p>
+      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick o Clave Admin:</b></p>
       <input id="loginNick" value="${defaultNick}" placeholder="Tu Nick / Nombre"><br>
       <input id="playerRoomCode" value="" placeholder="Código de Sala"><br>
       <select id="playerTeamSelect">
@@ -196,7 +209,6 @@ function showLoginScreen(){
   document.body.appendChild(modalDiv);
 }
 
-// 📖 Ventana modal de instrucciones
 window.showHowToPlay = function(){
   const helpModal = document.createElement("div");
   helpModal.className = "modal";
@@ -204,12 +216,12 @@ window.showHowToPlay = function(){
   helpModal.innerHTML = `
     <div>
       <h2>📜 Guía de Supervivencia</h2>
-      <div style="text-align: left; font-size: 13px; color: #073b4c; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
-        <p><b>1. 🎮 Acceso por Nick:</b> Escribe tu apodo y el código de sala proporcionado por el Administrador para unirte a la partida.</p>
-        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad seleccionada. Verás cartas holográficas flotando 🎴. Acércate a menos de 50 metros para reclamarlas.</p>
-        <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida en el mapa, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
-        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un jugador del equipo rival a menos de 30 metros, ¡se desatará un combate estratégico a 3 rondas!</p>
-       
+      <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
+        <p><b>1. 🎮 Acceso por Nick:</b> Escribe tu apodo y el código de sala proporcionado por el Administrador.</p>
+        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad europea elegida. Acércate a menos de 50m de las cartas flotantes 🎴 para reclamarlas.</p>
+        <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
+        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un rival del equipo contrario a menos de 30m, ¡se desatará un combate de estrategia a 3 rondas!</p>
+        <p><b>5. 👑 Modo Administrador:</b> Introduce la clave de admin para crear salas y elegir ubicaciones europeas.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -291,15 +303,15 @@ async function showAdminConfigScreen(){
       `;
     });
   } else {
-    roomListHTML = "<p style='font-size:12px; color:#666;'>No hay salas creadas aún.</p>";
+    roomListHTML = "<p style='font-size:12px; color:#94a3b8;'>No hay salas creadas aún.</p>";
   }
 
   modalDiv.innerHTML = `
     <div>
       <h2>👑 Panel del Administrador</h2>
       
-      <div style="background:#eef4f8; padding:12px; border-radius:12px; margin-bottom:15px; text-align:left;">
-        <h4 style="margin:0 0 8px 0; color:#073b4c;">✨ Crear Nueva Partida Europea:</h4>
+      <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
+        <h4 style="margin:0 0 8px 0; color:#38bdf8;">✨ Crear Nueva Partida Europea:</h4>
         <label style="font-size:11px; font-weight:bold;">Código de Sala:</label><br>
         <input id="adminRoomCode" value="EUROPA1" placeholder="Ej: EUROPA1" style="width:90%"><br>
         <label style="font-size:11px; font-weight:bold;">Seleccionar Ciudad / Región:</label><br>
@@ -319,7 +331,7 @@ async function showAdminConfigScreen(){
       </div>
 
       <div style="text-align:left;">
-        <h4 style="margin:0 0 8px 0; color:#073b4c;">📋 Salas Existentes en Supabase:</h4>
+        <h4 style="margin:0 0 8px 0; color:#38bdf8;">📋 Salas Existentes en Supabase:</h4>
         <div id="roomListContainer">${roomListHTML}</div>
       </div>
     </div>
@@ -819,7 +831,7 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
     else if(total > 140) tier = "🟣 Épica";
     else if(total > 100) tier = "🔵 Rara";
 
-    html += `<div style="border:1px solid #ccc; padding:8px; margin:5px; border-radius:8px;">
+    html += `<div style="border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); padding:8px; margin:5px; border-radius:8px;">
       <b>${card.card_name}</b> <span style="font-size:11px; float:right;">${tier}</span><br>
       ⚔️ Ataque: ${card.attack} | 🛡️ Defensa: ${card.defense}
     </div>`;
