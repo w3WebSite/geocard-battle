@@ -60,9 +60,9 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* Estilos del Chat Flotante */
+/* Estilos del Chat Flotante con altura fija para que no crezca infinitamente */
 #chatContainer{
-  position: fixed; bottom: 15px; left: 15px; width: 300px; max-height: 250px;
+  position: fixed; bottom: 15px; left: 15px; width: 300px; height: 210px;
   background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; z-index: 600;
   display: none; flex-direction: column; box-shadow: 0 8px 25px rgba(0,0,0,0.4);
@@ -72,7 +72,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   font-size: 12px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between;
 }
 #chatMessages{
-  flex: 1; height: 140px; overflow-y: auto; padding: 8px; font-size: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px;
+  flex: 1; height: 120px; max-height: 120px; overflow-y: auto; padding: 8px; font-size: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px;
 }
 #chatInputArea{
   display: flex; padding: 6px; background: rgba(0,0,0,0.2); border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;
@@ -133,9 +133,9 @@ option { background: #0f172a; color: white; }
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
-<!-- Panel de Chat en Juego -->
+<!-- Panel de Chat en Juego con altura fija y control de scroll -->
 <div id="chatContainer">
-  <div id="chatHeader">💬 Chat de Partida <span id="toggleChat" style="cursor:pointer;">▼</span></div>
+  <div id="chatHeader">💬 Chat de Partida</div>
   <div id="chatMessages"></div>
   <div id="chatInputArea">
     <input id="chatInput" placeholder="Escribe un mensaje..." autocomplete="off">
@@ -831,7 +831,7 @@ window.deleteRoom = async function(codeToDelete){
     if (willDelete) {
       await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
       await supabase.from('player_cards').delete().eq('room_code', codeToDelete);
-      await supabase.from('geocard_mensajes').delete().eq('room_code', codeToDelete); // Borra mensajes de esta sala
+      await supabase.from('geocard_mensajes').delete().eq('room_code', codeToDelete);
       await supabase.from('rooms').delete().eq('code', codeToDelete);
       swal("Sala borrada", "Wipe completo (cartas y mensajes eliminados con éxito).", "success");
       document.getElementById("adminModal").remove();
@@ -859,7 +859,7 @@ window.startAdminGame = async function(){
   }, { onConflict: 'code' });
 
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
-  await supabase.from('geocard_mensajes').delete().eq('room_code', STATE.roomCode); // Limpia chat anterior de la sala
+  await supabase.from('geocard_mensajes').delete().eq('room_code', STATE.roomCode);
 
   const newGeocaches = [];
   for(let i = 0; i < maxCards; i++){
