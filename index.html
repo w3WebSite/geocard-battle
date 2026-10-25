@@ -265,7 +265,7 @@ window.showHowToPlay = function(){
       <h2>📜 Guía de Supervivencia y Progresión</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
         <p><b>1. 🎴 Persistencia:</b> Si sales y entras con el mismo Nick, recuperas tu inventario y tu nivel exacto.</p>
-        <p><b>2. ⭐ Sistema de XP y Niveles Infinitos:</b> Cada 5 cartas conseguidas subes de nivel automáticamente con colores dinámicos.</p>
+        <p><b>2. ⭐ Sistema de XP y Niveles Infinitos:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
         <p><b>3. 💬 Chat y Comunidad:</b> Usa el chat en vivo integrado o conéctate al servidor de Discord oficial.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
@@ -515,7 +515,7 @@ function updateUserPositionOnMap(){
   }
 
   let circleRadius = 60;
-  if(STATE.selectedPerk === 'tank') circleRadius = 75;
+  if(STATE.selectedPerk === 'tank') circleRadius = 85;
 
   if(STATE.rangeCircle){
     STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
@@ -554,7 +554,7 @@ async function loadGeocachesFromSupabase(){
 
     marker.on("click", async () => {
       let maxReach = 80;
-      if(STATE.selectedPerk === 'tank') maxReach = 95;
+      if(STATE.selectedPerk === 'tank') maxReach = 105;
 
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
       if(distance > maxReach){
@@ -569,6 +569,12 @@ async function loadGeocachesFromSupabase(){
 
       const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', cache.card_name);
 
+      let finalAttack = cache.attack;
+      let finalDefense = cache.defense;
+      if(STATE.selectedPerk === 'berserker') {
+        finalAttack += 15;
+      }
+
       if(existingCards && existingCards.length > 0) {
         const cardToUpgrade = existingCards[0];
         const newAttack = cardToUpgrade.attack + 15;
@@ -578,7 +584,7 @@ async function loadGeocachesFromSupabase(){
       } else {
         await supabase.from('player_cards').insert({
           room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
-          card_name: cache.card_name, attack: cache.attack, defense: cache.defense, image_url: cache.image_url || ""
+          card_name: cache.card_name, attack: finalAttack, defense: finalDefense, image_url: cache.image_url || ""
         });
         swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${cache.card_name}`, "success");
       }
@@ -615,8 +621,9 @@ function checkPlayerLevelProgression() {
 
   if(calculatedLevel > STATE.playerLevel) {
     STATE.playerLevel = calculatedLevel;
-    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has alcanzado una nueva marca de cartas capturadas!", "success");
+    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has subido de nivel! Elige tu ventaja táctica:", "success");
     updateUserPositionOnMap();
+    showPerkSelectionModal();
   }
 
   if(xpDisplay) {
@@ -625,6 +632,30 @@ function checkPlayerLevelProgression() {
     xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${progressInLevel}/5 para el siguiente)`;
   }
 }
+
+function showPerkSelectionModal() {
+  const perkModal = document.createElement("div");
+  perkModal.className = "modal";
+  perkModal.id = "perkModal";
+  perkModal.innerHTML = `
+    <div>
+      <h2>⚡ ¡Elige tu Habilidad de Nivel ${STATE.playerLevel}!</h2>
+      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Selecciona un beneficio táctico para potenciar tu aventura:</p>
+      <button onclick="window.selectPerk('tank')" style="width:90%; background:linear-gradient(45deg,#2a9d8f,#264653);">🛡️ Tanque Táctico (+Radio de Captura)</button><br>
+      <button onclick="window.selectPerk('berserker')" style="width:90%; background:linear-gradient(45deg,#e76f51,#f4a261);">⚔️ Furia Berserker (+15 Ataque en Cartas)</button><br>
+      <button onclick="window.selectPerk('radar')" style="width:90%; background:linear-gradient(45deg,#457b9d,#1d3557);">📡 Radar Ágil (Visión extendida)</button>
+    </div>
+  `;
+  document.body.appendChild(perkModal);
+}
+
+window.selectPerk = function(perkType) {
+  STATE.selectedPerk = perkType;
+  const perkNames = { tank: "Tanque Táctico 🛡️", berserker: "Furia Berserker ⚔️", radar: "Radar Ágil 📡" };
+  swal("¡Habilidad Activada!", `Has seleccionado: ${perkNames[perkType]}`, "success");
+  updateUserPositionOnMap();
+  document.getElementById("perkModal").remove();
+};
 
 function listenRoomChanges() {
   supabase.channel('public:rooms').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
@@ -792,7 +823,7 @@ window.adminEnterRoom = function(code, duration, cityKey){
 window.deleteRoom = async function(codeToDelete){
   swal({
     title: "¿Borrar sala " + codeToDelete + "?",
-    text: "Esto borrará la sala y las cartas.",
+    text: "Esto borrará la sala, las cartas y los mensajes de chat.",
     icon: "warning",
     buttons: ["Cancelar", "Sí, borrar"],
     dangerMode: true,
@@ -800,8 +831,9 @@ window.deleteRoom = async function(codeToDelete){
     if (willDelete) {
       await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
       await supabase.from('player_cards').delete().eq('room_code', codeToDelete);
+      await supabase.from('geocard_mensajes').delete().eq('room_code', codeToDelete); // Borra mensajes de esta sala
       await supabase.from('rooms').delete().eq('code', codeToDelete);
-      swal("Sala borrada", "Wipe realizado con éxito.", "success");
+      swal("Sala borrada", "Wipe completo (cartas y mensajes eliminados con éxito).", "success");
       document.getElementById("adminModal").remove();
       showAdminConfigScreen();
     }
@@ -827,6 +859,7 @@ window.startAdminGame = async function(){
   }, { onConflict: 'code' });
 
   await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
+  await supabase.from('geocard_mensajes').delete().eq('room_code', STATE.roomCode); // Limpia chat anterior de la sala
 
   const newGeocaches = [];
   for(let i = 0; i < maxCards; i++){
