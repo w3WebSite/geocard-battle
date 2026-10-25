@@ -278,7 +278,6 @@ window.processPlayerLogin = async function(){
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
 
-  // CONSULTAR CARTAS Y RESTAURAR NIVEL AL ENTRAR
   const { count, error: countErr } = await supabase
     .from('player_cards')
     .select('*', { count: 'exact', head: true })
@@ -287,7 +286,6 @@ window.processPlayerLogin = async function(){
 
   if(!countErr && count !== null) {
     STATE.cardsCaptured = count;
-    // Cada 5 cartas se sube 1 nivel (Nivel 1 para 0-4 cartas, Nivel 2 para 5-9, Nivel 3 para 10-14, etc.)
     STATE.playerLevel = Math.floor(count / 5) + 1;
   }
 
@@ -298,25 +296,43 @@ window.processPlayerLogin = async function(){
   launchGameEngine(roomData.duration || 30);
 };
 
-// ... [El resto de funciones del mapa, geolocalización, sincronización y panel de admin se mantienen idénticas, actualizando checkPlayerLevelProgression y updateUserPositionOnMap]
+function launchGameEngine(durationMinutes){
+  document.getElementById("panel").style.display = "block";
+  document.getElementById("btnExit").style.display = "inline-block";
+  document.getElementById("timerContainer").style.display = "block";
 
-function checkPlayerLevelProgression() {
-  const xpDisplay = document.getElementById("playerXpDisplay");
-  
-  // Cálculo de nivel dinámico basado en las cartas capturadas totales (cada 5 cartas un nivel)
-  const calculatedLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
+  initMap();
+  startGeolocationTracking();
+  loadGeocachesFromSupabase();
+  listenRoomChanges();
+  setupRealtimePresence();
+  startTimer(durationMinutes * 60);
+}
 
-  if(calculatedLevel > STATE.playerLevel) {
-    STATE.playerLevel = calculatedLevel;
-    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has alcanzado una nueva marca de cartas capturadas! Tu distinción en el mapa ha evolucionado de nivel.", "success");
+function initMap(){
+  if(STATE.mapInitialized) return;
+  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(STATE.map);
+  STATE.mapInitialized = true;
+}
+
+function startGeolocationTracking(){
+  if ("geolocation" in navigator) {
+    const geoOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+    STATE.watchPositionId = navigator.geolocation.watchPosition(
+      (position) => {
+        STATE.userLat = position.coords.latitude;
+        STATE.userLng = position.coords.longitude;
+        updateUserPositionOnMap();
+      },
+      (error) => {
+        console.warn("Error de geolocalización:", error.message);
+        updateUserPositionOnMap();
+      },
+      geoOptions
+    );
+  } else {
     updateUserPositionOnMap();
-  }
-
-  if(xpDisplay) {
-    const nextLevelCards = STATE.playerLevel * 5;
-    const currentLevelBaseCards = (STATE.playerLevel - 1) * 5;
-    const progressInLevel = STATE.cardsCaptured - currentLevelBaseCards;
-    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${progressInLevel}/5 para el siguiente)`;
   }
 }
 
@@ -324,12 +340,10 @@ function updateUserPositionOnMap(){
   if(!STATE.map) return;
 
   const color = STATE.team === 'red' ? '#e63946' : '#1d3557';
-  
   let glowStyle = "box-shadow:0 0 10px rgba(0,0,0,0.6);";
   let badgeHTML = "";
   
   if(STATE.playerLevel >= 2) {
-    // Cambio dinámico de color de la aureola e insignia según el nivel alcanzado
     const colorsList = ['#e9c46a', '#38bdf8', '#a855f7', '#ec4899', '#22c55e', '#f97316'];
     const badgeColor = colorsList[(STATE.playerLevel - 2) % colorsList.length];
     
@@ -361,24 +375,311 @@ function updateUserPositionOnMap(){
     STATE.rangeCircle.setRadius(circleRadius);
   } else {
     STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], {
-      color: color,
-      fillColor: color,
-      fillOpacity: 0.15,
-      radius: circleRadius
+      color: color, fillColor: color, fillOpacity: 0.15, radius: circleRadius
     }).addTo(STATE.map);
   }
 
   if(roomChannel){
     roomChannel.track({
       nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
-      lat: STATE.userLat,
-      lng: STATE.userLng,
-      team: STATE.team,
-      level: STATE.playerLevel,
+      lat: STATE.userLat, lng: STATE.userLng,
+      team: STATE.team, level: STATE.playerLevel,
       online_at: new Date().toISOString()
     });
   }
 }
+
+async function loadGeocachesFromSupabase(){
+  const { data, error } = await supabase.from('geocaches').select('*').eq('room_code', STATE.roomCode).eq('claimed', false);
+  if(error || !data) return;
+
+  const group = [];
+  data.forEach(cache => {
+    const cacheIcon = L.divIcon({
+      className: "custom-card-icon",
+      html: `<div class="modernCardMarker">🎴</div>`,
+      iconSize: [36, 48], iconAnchor: [18, 24]
+    });
+
+    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+    group.push(marker);
+
+    marker.on("click", async () => {
+      let maxReach = 80;
+      if(STATE.selectedPerk === 'tank') maxReach = 95;
+
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+      if(distance > maxReach){
+        swal("Estás muy lejos (" + Math.round(distance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
+        return;
+      }
+
+      await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
+
+      STATE.cardsCaptured++;
+      checkPlayerLevelProgression();
+
+      const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', cache.card_name);
+
+      if(existingCards && existingCards.length > 0) {
+        const cardToUpgrade = existingCards[0];
+        const newAttack = cardToUpgrade.attack + 15;
+        const newDefense = cardToUpgrade.defense + 15;
+        await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
+        swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${cache.card_name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
+      } else {
+        await supabase.from('player_cards').insert({
+          room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
+          card_name: cache.card_name, attack: cache.attack, defense: cache.defense, image_url: cache.image_url || ""
+        });
+        swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${cache.card_name}`, "success");
+      }
+
+      STATE.map.removeLayer(marker);
+    });
+  });
+
+  if(group.length > 0){
+    const featureGroup = L.featureGroup(group);
+    STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
+  }
+}
+
+function checkPlayerLevelProgression() {
+  const xpDisplay = document.getElementById("playerXpDisplay");
+  const calculatedLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
+
+  if(calculatedLevel > STATE.playerLevel) {
+    STATE.playerLevel = calculatedLevel;
+    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has alcanzado una nueva marca de cartas capturadas!", "success");
+    updateUserPositionOnMap();
+  }
+
+  if(xpDisplay) {
+    const currentLevelBaseCards = (STATE.playerLevel - 1) * 5;
+    const progressInLevel = STATE.cardsCaptured - currentLevelBaseCards;
+    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${progressInLevel}/5 para el siguiente)`;
+  }
+}
+
+function listenRoomChanges() {
+  supabase.channel('public:rooms').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
+    if(payload.new){
+      document.getElementById("redScore").innerText = payload.new.red_score || 0;
+      document.getElementById("blueScore").innerText = payload.new.blue_score || 0;
+    }
+  }).subscribe();
+}
+
+function setupRealtimePresence() {
+  roomChannel = supabase.channel('room_' + STATE.roomCode, {
+    config: { presence: { key: STATE.user.email } }
+  });
+
+  roomChannel.on('presence', { event: 'sync' }, () => {
+    updatePlayerMarkers(roomChannel.presenceState());
+  }).subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await roomChannel.track({
+        nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
+        lat: STATE.userLat, lng: STATE.userLng,
+        team: STATE.team, level: STATE.playerLevel,
+        online_at: new Date().toISOString()
+      });
+    }
+  });
+}
+
+function updatePlayerMarkers(presenceState) {
+  let totalPlayers = 0;
+  Object.keys(playerMarkers).forEach(email => {
+    if (!presenceState[email]) {
+      STATE.map.removeLayer(playerMarkers[email]);
+      delete playerMarkers[email];
+    }
+  });
+
+  Object.keys(presenceState).forEach(email => {
+    const playerDatas = presenceState[email];
+    totalPlayers += playerDatas.length;
+    playerDatas.forEach(data => {
+      if (email === STATE.user.email) return;
+
+      const color = data.team === 'red' ? '#e63946' : '#1d3557';
+      let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
+      let enemyBadge = "";
+      if(data.level && data.level >= 2) {
+        enemyGlow = "box-shadow: 0 0 14px #e9c46a; border: 2px solid #e9c46a;";
+        enemyBadge = `<div style="position:absolute; top:-10px; right:-10px; background:#e9c46a; color:#073b4c; font-size:9px; font-weight:bold; padding:1px 3px; border-radius:4px;">⭐L${data.level}</div>`;
+      }
+
+      const playerIcon = L.divIcon({
+        className: "player-icon",
+        html: `<div style="position:relative; background:${color}; width:18px; height:18px; border-radius:50%; border:2px solid white; ${enemyGlow}">${enemyBadge}</div>`,
+        iconSize: [18, 18], iconAnchor: [9, 9]
+      });
+
+      if (playerMarkers[email]) {
+        playerMarkers[email].setLatLng([data.lat, data.lng]);
+        playerMarkers[email].setIcon(playerIcon);
+      } else {
+        const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
+        marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team.toUpperCase()})<br>Nivel: ${data.level || 1}`);
+        playerMarkers[email] = marker;
+      }
+    });
+  });
+
+  const onlineEl = document.getElementById("onlineCount");
+  if(onlineEl) onlineEl.innerText = totalPlayers;
+}
+
+function startTimer(durationSeconds) {
+  let timer = durationSeconds;
+  const timerDisplay = document.getElementById("timer");
+  if(timerInterval) clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+    let minutes = parseInt(timer / 60, 10);
+    let seconds = parseInt(timer % 60, 10);
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    if(timerDisplay) timerDisplay.textContent = minutes + ":" + seconds;
+
+    if (--timer < 0) {
+      clearInterval(timerInterval);
+      swal("¡Tiempo Terminado!", "La partida ha finalizado.", "info");
+    }
+  }, 1000);
+}
+
+document.getElementById("btnExit").addEventListener("click", () => {
+  window.location.reload();
+});
+
+async function showAdminConfigScreen(){
+  const modalDiv = document.createElement("div");
+  modalDiv.className = "modal";
+  modalDiv.id = "adminModal";
+
+  const { data: rooms } = await supabase.from('rooms').select('*');
+  let roomListHTML = "";
+
+  if(rooms && rooms.length > 0){
+    rooms.forEach(r => {
+      let cityName = CITIES[r.city]?.name || "Deltebre";
+      roomListHTML += `
+        <div class="room-item">
+          <span><b>${r.code}</b> (${cityName} - ${r.duration}m)</span>
+          <div>
+            <button class="btn-enter" onclick="window.adminEnterRoom('${r.code}', ${r.duration}, '${r.city || 'deltebre'}')">👁️ Entrar</button>
+            <button class="btn-delete" onclick="window.deleteRoom('${r.code}')">🗑️ Borrar</button>
+          </div>
+        </div>
+      `;
+    });
+  } else {
+    roomListHTML = "<p style='font-size:12px; color:#94a3b8;'>No hay salas creadas aún.</p>";
+  }
+
+  modalDiv.innerHTML = `
+    <div>
+      <h2>👑 Panel del Administrador</h2>
+      <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
+        <h4 style="margin:0 0 8px 0; color:#38bdf8;">✨ Crear Nueva Partida:</h4>
+        <label style="font-size:11px; font-weight:bold;">Código de Sala:</label><br>
+        <input id="adminRoomCode" value="EUROPA1" style="width:90%"><br>
+        <label style="font-size:11px; font-weight:bold;">Ciudad / Región:</label><br>
+        <select id="adminCitySelect" style="width:90%;">
+          <option value="deltebre">Deltebre (Delta del Ebro) 🇪🇸</option>
+          <option value="barcelona">Barcelona 🇪🇸</option>
+          <option value="madrid">Madrid 🇪🇸</option>
+          <option value="paris">París 🇫🇷</option>
+          <option value="roma">Roma 🇮🇹</option>
+          <option value="berlin">Berlín 🇩🇪</option>
+        </select><br>
+        <label style="font-size:11px; font-weight:bold;">Tiempo (minutos):</label><br>
+        <input type="number" id="adminDuration" value="30" style="width:90%"><br>
+        <label style="font-size:11px; font-weight:bold;">Cartas en mapa:</label><br>
+        <input type="number" id="adminMaxCards" value="12" style="width:90%"><br><br>
+        <button onclick="window.startAdminGame()" style="width:100%; margin:0;">Crear y Lanzar 🚀</button>
+      </div>
+      <div style="text-align:left;">
+        <h4 style="margin:0 0 8px 0; color:#38bdf8;">📋 Salas Existentes:</h4>
+        <div id="roomListContainer">${roomListHTML}</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modalDiv);
+}
+
+window.adminEnterRoom = function(code, duration, cityKey){
+  if(CITIES[cityKey]) {
+    STATE.userLat = CITIES[cityKey].lat;
+    STATE.userLng = CITIES[cityKey].lng;
+  }
+  STATE.roomCode = code;
+  STATE.team = "red";
+  document.getElementById("adminModal").remove();
+  launchGameEngine(duration || 30);
+};
+
+window.deleteRoom = async function(codeToDelete){
+  swal({
+    title: "¿Borrar sala " + codeToDelete + "?",
+    text: "Esto borrará la sala y las cartas.",
+    icon: "warning",
+    buttons: ["Cancelar", "Sí, borrar"],
+    dangerMode: true,
+  }).then(async (willDelete) => {
+    if (willDelete) {
+      await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
+      await supabase.from('player_cards').delete().eq('room_code', codeToDelete);
+      await supabase.from('rooms').delete().eq('code', codeToDelete);
+      swal("Sala borrada", "Wipe realizado con éxito.", "success");
+      document.getElementById("adminModal").remove();
+      showAdminConfigScreen();
+    }
+  });
+};
+
+window.startAdminGame = async function(){
+  const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
+  const cityKey = document.getElementById("adminCitySelect").value;
+  const duration = parseInt(document.getElementById("adminDuration").value) || 30;
+  const maxCards = parseInt(document.getElementById("adminMaxCards").value) || 12;
+
+  if(!code) return;
+
+  const cityData = CITIES[cityKey];
+  STATE.userLat = cityData.lat;
+  STATE.userLng = cityData.lng;
+  STATE.roomCode = code;
+  STATE.team = "red";
+
+  await supabase.from('rooms').upsert({
+    code: STATE.roomCode, active: true, city: cityKey, duration: duration, red_score: 0, blue_score: 0
+  }, { onConflict: 'code' });
+
+  await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
+
+  const newGeocaches = [];
+  for(let i = 0; i < maxCards; i++){
+    const template = CARD_POOL[i % CARD_POOL.length];
+    newGeocaches.push({
+      room_code: STATE.roomCode,
+      lat: STATE.userLat + (Math.random() - 0.5) * 0.03,
+      lng: STATE.userLng + (Math.random() - 0.5) * 0.03,
+      card_name: template.name, card_type: template.type,
+      attack: template.attack, defense: template.defense, claimed: false
+    });
+  }
+
+  await supabase.from('geocaches').insert(newGeocaches);
+  document.getElementById("adminModal").remove();
+  launchGameEngine(duration);
+};
 </script>
 </body>
 </html>
