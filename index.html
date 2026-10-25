@@ -173,6 +173,7 @@ let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
 let battleCooldowns = {};
+let mapMarkersList = {};
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -184,6 +185,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 
 window.addEventListener('DOMContentLoaded', () => {
   showLoginScreen();
+  document.getElementById("btnInventory").addEventListener("click", showPlayerInventory);
 });
 
 function showLoginScreen(){
@@ -296,6 +298,52 @@ window.processPlayerLogin = async function(){
   launchGameEngine(roomData.duration || 30);
 };
 
+async function showPlayerInventory() {
+  const { data: myCards, error } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  if(error) {
+    swal("Error", "No se pudo cargar tu inventario", "error");
+    return;
+  }
+
+  let cardsHTML = "";
+  if(myCards && myCards.length > 0) {
+    myCards.forEach(c => {
+      let tier = "🟢 Común";
+      let total = c.attack + c.defense;
+      if(total > 180) tier = "🔥 ¡LEGENDARIA!";
+      else if(total > 140) tier = "🟣 Épica";
+      else if(total > 100) tier = "🔵 Rara";
+
+      cardsHTML += `
+        <div style="background:rgba(255,255,255,0.06); padding:10px; margin:8px 0; border-radius:10px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
+          <b>🎴 ${c.card_name}</b> <span style="font-size:11px; color:#38bdf8;">(${tier})</span><br>
+          <span style="font-size:12px; color:#cbd5e1;">⚔️ Ataque: ${c.attack} | 🛡️ Defensa: ${c.defense}</span>
+        </div>
+      `;
+    });
+  } else {
+    cardsHTML = "<p style='color:#94a3b8; font-size:13px;'>Aún no has conseguido ninguna carta en esta partida. ¡Sal a capturarlas al mapa!</p>";
+  }
+
+  const invModal = document.createElement("div");
+  invModal.className = "modal";
+  invModal.id = "inventoryModal";
+  invModal.innerHTML = `
+    <div>
+      <h2>🎒 Tu Inventario de Cartas</h2>
+      <p style="font-size:12px; color:#38bdf8; margin-bottom:10px;">Total capturadas: ${STATE.cardsCaptured} | Nivel: ${STATE.playerLevel}</p>
+      <div style="max-height:280px; overflow-y:auto; padding-right:5px;">${cardsHTML}</div><br>
+      <button onclick="document.getElementById('inventoryModal').remove()">Cerrar ✖️</button>
+    </div>
+  `;
+  document.body.appendChild(invModal);
+}
+
 function launchGameEngine(durationMinutes){
   document.getElementById("panel").style.display = "block";
   document.getElementById("btnExit").style.display = "inline-block";
@@ -305,8 +353,10 @@ function launchGameEngine(durationMinutes){
   startGeolocationTracking();
   loadGeocachesFromSupabase();
   listenRoomChanges();
+  listenGeocacheChanges();
   setupRealtimePresence();
   startTimer(durationMinutes * 60);
+  checkPlayerLevelProgression();
 }
 
 function initMap(){
@@ -402,6 +452,7 @@ async function loadGeocachesFromSupabase(){
     });
 
     const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+    mapMarkersList[cache.id] = marker;
     group.push(marker);
 
     marker.on("click", async () => {
@@ -435,14 +486,30 @@ async function loadGeocachesFromSupabase(){
         swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${cache.card_name}`, "success");
       }
 
-      STATE.map.removeLayer(marker);
+      if(mapMarkersList[cache.id]) {
+        STATE.map.removeLayer(mapMarkersList[cache.id]);
+        delete mapMarkersList[cache.id];
+      }
     });
   });
 
-  if(group.length > 0){
+  if(group.length > 0 && !STATE.mapInitializedBounds){
     const featureGroup = L.featureGroup(group);
     STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
+    STATE.mapInitializedBounds = true;
   }
+}
+
+function listenGeocacheChanges() {
+  supabase.channel('public:geocaches')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      const updatedCache = payload.new;
+      if (updatedCache.claimed && mapMarkersList[updatedCache.id]) {
+        STATE.map.removeLayer(mapMarkersList[updatedCache.id]);
+        delete mapMarkersList[updatedCache.id];
+      }
+    })
+    .subscribe();
 }
 
 function checkPlayerLevelProgression() {
