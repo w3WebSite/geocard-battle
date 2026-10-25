@@ -81,7 +81,6 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
 
-
 @keyframes floatCard {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
@@ -102,27 +101,21 @@ option { background: #0f172a; color: white; }
 
 /* 📱 AJUSTES RESPONSIVE PARA MÓVILES */
 @media (max-width: 768px) {
-  /* Mueve el panel flotante un poco más abajo para que no tape el temporizador */
   #panel {
     top: 75px !important;
     right: 10px !important;
     padding: 10px 14px !important;
     font-size: 12px;
   }
-
-  /* Hace más compacto el contenedor del temporizador arriba a la izquierda/centro */
   #timerContainer {
     font-size: 14px !important;
     margin: 5px 10px !important;
   }
-
-  /* Reubica el botón de salir para que no estorbe */
   #btnExit {
     padding: 6px 12px !important;
     font-size: 12px !important;
   }
 }
-
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
@@ -453,17 +446,27 @@ function initMap(){
 
 function startGeolocationTracking(){
   if ("geolocation" in navigator) {
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    };
+
     STATE.watchPositionId = navigator.geolocation.watchPosition(
       (position) => {
+        STATE.userLat = position.coords.latitude;
+        STATE.userLng = position.coords.longitude;
         updateUserPositionOnMap();
       },
       (error) => {
-        console.warn("GPS usando ubicación de la ciudad seleccionada.", error);
+        console.warn("Error de geolocalización o GPS desactivado:", error.message);
+        swal("Aviso GPS", "No se pudo obtener tu ubicación exacta en tiempo real. Usando la ciudad por defecto.", "info");
         updateUserPositionOnMap();
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+      geoOptions
     );
   } else {
+    swal("GPS no compatible", "Tu navegador no soporta geolocalización.", "error");
     updateUserPositionOnMap();
   }
 }
@@ -483,7 +486,8 @@ function updateUserPositionOnMap(){
     STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
   } else {
     STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
-    STATE.userMarker.bindPopup(`<b>${STATE.user.nick}</b>`);
+    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (Tú)</b>`);
+    STATE.map.setView([STATE.userLat, STATE.userLng], 16);
   }
 
   if(STATE.rangeCircle){
