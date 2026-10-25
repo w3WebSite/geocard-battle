@@ -154,7 +154,7 @@ const CITIES = {
 };
 
 const STATE = {
-  user: { email: "", nick: "" },
+  user: { email: "", nick: "", playerClass: "" },
   roomCode: null,
   team: null,
   isAdmin: false,
@@ -204,16 +204,21 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function showLoginScreen(){
-  const defaultNick = "Jugador_" + Math.floor(Math.random() * 900 + 100);
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
   modalDiv.id = "loginModal";
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Europa</h2>
-      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick o Clave Admin:</b></p>
-      <input id="loginNick" value="${defaultNick}" placeholder="Tu Nick / Nombre"><br>
-      <input id="playerRoomCode" value="" placeholder="Código de Sala"><br>
+      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick y Clase (para conservar tus cartas si entras y sales):</b></p>
+      <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)"><br>
+      <select id="playerClassSelect">
+        <option value="⚔️ Guerrero">⚔️ Guerrero (Ataque)</option>
+        <option value="🛡️ Guardián">🛡️ Guardián (Defensa)</option>
+        <option value="⚡ Explorador">⚡ Explorador (Agilidad)</option>
+        <option value="🔮 Mago Táctico">🔮 Mago Táctico (Especial)</option>
+      </select><br>
+      <input id="playerRoomCode" placeholder="Código de Sala"><br>
       <select id="playerTeamSelect">
         <option value="red">Equipo Rojo 🔴</option>
         <option value="blue">Equipo Azul 🔵</option>
@@ -231,12 +236,12 @@ window.showHowToPlay = function(){
   helpModal.id = "helpModal";
   helpModal.innerHTML = `
     <div>
-      <h2>📜 Guía de Supervivencia y XP</h2>
+      <h2>📜 Guía de Supervivencia y Clases</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
-        <p><b>1. 🎴 Captura de Cartas:</b> Acércate a menos de 60m para reclamar cartas.</p>
-        <p><b>2. ⭐ Sistema de XP (Nivel 2 a las 5 cartas):</b> Al capturar 5 cartas ganas un multiplicador y un aura brillante en tu marcador.</p>
-        <p><b>3. ⚡ Roles Tácticos (Nivel 3 a las 10 cartas):</b> Al capturar 10 cartas podrás escoger una habilidad especial de combate o exploración.</p>
-        <p><b>4. ⚔️ Duelos PvP:</b> Combate a 3 rondas al cruzarte con rivales cercanos.</p>
+        <p><b>1. 🎴 Identidad y Cartas:</b> Usa siempre el mismo Nick y clase para recuperar tu inventario si sales y vuelves a entrar.</p>
+        <p><b>2. ⭐ Sistema de XP (Nivel 2 a las 5 cartas):</b> Multiplicador de puntos y aureola brillante en el mapa.</p>
+        <p><b>3. ⚡ Roles Tácticos (Nivel 3 a las 10 cartas):</b> Elige ventajas especiales de combate.</p>
+        <p><b>4. ⚔️ Duelos PvP:</b> Combates a 3 rondas que suman puntos reales al marcador global de tu equipo.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -246,6 +251,7 @@ window.showHowToPlay = function(){
 
 window.processPlayerLogin = async function(){
   const nickInput = document.getElementById("loginNick").value.trim();
+  const playerClass = document.getElementById("playerClassSelect").value;
   const roomCodeInput = document.getElementById("playerRoomCode").value.trim().toUpperCase();
   const team = document.getElementById("playerTeamSelect").value;
 
@@ -285,9 +291,14 @@ window.processPlayerLogin = async function(){
 
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
-  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}@game.com`;
+  STATE.user.playerClass = playerClass;
+  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${playerClass.replace(/[^a-zA-Z]/g, '')}@game.com`;
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
+
+  // Cargar puntuaciones iniciales reales de la sala
+  document.getElementById("redScore").innerText = roomData.red_score || 0;
+  document.getElementById("blueScore").innerText = roomData.blue_score || 0;
 
   document.getElementById("loginModal").remove();
   launchGameEngine(roomData.duration || 30);
@@ -501,7 +512,7 @@ function updateUserPositionOnMap(){
     STATE.userMarker.setIcon(playerIcon);
   } else {
     STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
-    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (Tú)</b><br>Nivel XP: ${STATE.playerLevel}`);
+    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (${STATE.user.playerClass})</b><br>Nivel XP: ${STATE.playerLevel}`);
     STATE.map.setView([STATE.userLat, STATE.userLng], 16);
   }
 
@@ -522,7 +533,7 @@ function updateUserPositionOnMap(){
 
   if(roomChannel){
     roomChannel.track({
-      nick: STATE.user.nick,
+      nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
       lat: STATE.userLat,
       lng: STATE.userLng,
       team: STATE.team,
@@ -828,10 +839,27 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
       swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra ${eNick}. ¡Has sumado +${pointsWon} puntos para tu equipo!`, "success");
       
       const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
-      const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
-      if(currentRoom) {
-        const newScore = (currentRoom[scoreKey] || 0) + pointsWon;
-        await supabase.from('rooms').update({ [scoreKey]: newScore }).eq('code', STATE.roomCode);
+      
+      // Obtener el valor actual exacto de Supabase para evitar sobrescrituras vacías
+      const { data: currentRoom, error: fetchErr } = await supabase
+        .from('rooms')
+        .select('red_score, blue_score')
+        .eq('code', STATE.roomCode)
+        .single();
+
+      if(!fetchErr && currentRoom) {
+        const currentScore = currentRoom[scoreKey] || 0;
+        const newScore = currentScore + pointsWon;
+
+        const { error: updateErr } = await supabase
+          .from('rooms')
+          .update({ [scoreKey]: newScore })
+          .eq('code', STATE.roomCode);
+
+        if(!updateErr) {
+          if(STATE.team === 'red') document.getElementById("redScore").innerText = newScore;
+          else document.getElementById("blueScore").innerText = newScore;
+        }
       }
     } else {
       swal("DERROTA EN EL DUELO TÁCTICO 💔", `${eNick} ganó ${window.enemyWins} de 3 rondas. ¡Evoluciona tus cartas explorando más el mapa!`, "error");
@@ -904,7 +932,7 @@ function setupRealtimePresence() {
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
-          nick: STATE.user.nick,
+          nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
           lat: STATE.userLat,
           lng: STATE.userLng,
           team: STATE.team,
@@ -923,11 +951,11 @@ document.getElementById("btnInventory").addEventListener("click", async () => {
     .eq('user_email', STATE.user.email);
 
   if(error || !data || !data.length){ 
-    swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa.", "info"); 
+    swal("Inventario vacío", "Aún no has capturado ninguna carta en el mapa con este usuario.", "info"); 
     return; 
   }
 
-  let html = `<h3>Tus Cartas Coleccionadas</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
+  let html = `<h3>Tus Cartas (${STATE.user.nick})</h3><div style="max-height:250px; overflow-y:auto; text-align:left;">`;
   data.forEach(card => {
     let tier = "🟢 Común";
     let total = card.attack + card.defense;
