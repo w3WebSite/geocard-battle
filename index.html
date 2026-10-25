@@ -99,7 +99,6 @@ option { background: #0f172a; color: white; }
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-/* 📱 AJUSTES RESPONSIVE PARA MÓVILES */
 @media (max-width: 768px) {
   #panel {
     top: 75px !important;
@@ -124,6 +123,7 @@ option { background: #0f172a; color: white; }
 <div id="panel">
   <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>
   <div style="font-size: 13px; margin: 4px 0;">👥 En línea: <span id="onlineCount">1</span></div>
+  <div style="font-size: 12px; margin: 2px 0; color:#38bdf8;">⭐ XP / Nivel: <span id="playerXpDisplay">Nivel 1 (0/5)</span></div>
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
@@ -164,7 +164,10 @@ const STATE = {
   userLng: 0.7365,
   userMarker: null,
   rangeCircle: null,
-  watchPositionId: null
+  watchPositionId: null,
+  cardsCaptured: 0,
+  playerLevel: 1,
+  selectedPerk: null
 };
 
 const CARD_POOL = [
@@ -228,12 +231,12 @@ window.showHowToPlay = function(){
   helpModal.id = "helpModal";
   helpModal.innerHTML = `
     <div>
-      <h2>📜 Guía de Supervivencia</h2>
+      <h2>📜 Guía de Supervivencia y XP</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
-        <p><b>1. 🎮 Acceso por Nick:</b> Escribe tu apodo y el código de sala proporcionado por el Administrador.</p>
-        <p><b>2. 🎴 Explora el Mapa:</b> Muévete por la ciudad europea elegida. Acércate a menos de 60m de las cartas flotantes 🎴 para reclamarlas.</p>
-        <p><b>3. ✨ Sistema de Evolución:</b> Si encuentras una carta repetida, subirá automáticamente de nivel (+15 Ataque / +15 Defensa).</p>
-        <p><b>4. ⚔️ Duelos Tácticos PvP:</b> Al cruzarte con un rival del equipo contrario a menos de 30m, ¡se desatará un combate a 3 rondas!</p>
+        <p><b>1. 🎴 Captura de Cartas:</b> Acércate a menos de 60m para reclamar cartas.</p>
+        <p><b>2. ⭐ Sistema de XP (Nivel 2 a las 5 cartas):</b> Al capturar 5 cartas ganas un multiplicador y un aura brillante en tu marcador.</p>
+        <p><b>3. ⚡ Roles Tácticos (Nivel 3 a las 10 cartas):</b> Al capturar 10 cartas podrás escoger una habilidad especial de combate o exploración.</p>
+        <p><b>4. ⚔️ Duelos PvP:</b> Combate a 3 rondas al cruzarte con rivales cercanos.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -475,29 +478,43 @@ function updateUserPositionOnMap(){
   if(!STATE.map) return;
 
   const color = STATE.team === 'red' ? '#e63946' : '#1d3557';
+  
+  // Insignia visual si es nivel 2 o superior (XP boost activo)
+  let glowStyle = "box-shadow:0 0 10px rgba(0,0,0,0.6);";
+  let badgeHTML = "";
+  if(STATE.playerLevel >= 2) {
+    glowStyle = "box-shadow: 0 0 16px #e9c46a, 0 0 25px #e63946; border: 3px solid #e9c46a;";
+    badgeHTML = `<div style="position:absolute; top:-12px; right:-12px; background:#e9c46a; color:#073b4c; font-size:10px; font-weight:bold; padding:1px 4px; border-radius:6px; border:1px solid white;">⭐L${STATE.playerLevel}</div>`;
+  }
+
   const playerIcon = L.divIcon({
     className: "my-position-icon",
-    html: `<div style="background:${color}; width:20px; height:20px; border-radius:50%; border:3px solid white; box-shadow:0 0 10px rgba(0,0,0,0.6);"></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
+    html: `<div style="position:relative; background:${color}; width:22px; height:22px; border-radius:50%; border:3px solid white; ${glowStyle}">${badgeHTML}</div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
   });
 
   if(STATE.userMarker){
     STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
+    STATE.userMarker.setIcon(playerIcon);
   } else {
     STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
-    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (Tú)</b>`);
+    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (Tú)</b><br>Nivel XP: ${STATE.playerLevel}`);
     STATE.map.setView([STATE.userLat, STATE.userLng], 16);
   }
 
+  let circleRadius = 60;
+  if(STATE.selectedPerk === 'tank') circleRadius = 75; // Ventaja del tanque
+
   if(STATE.rangeCircle){
     STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
+    STATE.rangeCircle.setRadius(circleRadius);
   } else {
     STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], {
       color: color,
       fillColor: color,
       fillOpacity: 0.15,
-      radius: 60
+      radius: circleRadius
     }).addTo(STATE.map);
   }
 
@@ -507,6 +524,7 @@ function updateUserPositionOnMap(){
       lat: STATE.userLat,
       lng: STATE.userLng,
       team: STATE.team,
+      level: STATE.playerLevel,
       online_at: new Date().toISOString()
     });
   }
@@ -536,8 +554,11 @@ async function loadGeocachesFromSupabase(){
     group.push(marker);
 
     marker.on("click", async () => {
+      let maxReach = 80;
+      if(STATE.selectedPerk === 'tank') maxReach = 95; // Alcance extendido
+
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-      if(distance > 80){
+      if(distance > maxReach){
         swal("Estás muy lejos (" + Math.round(distance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
         return;
       }
@@ -548,6 +569,10 @@ async function loadGeocachesFromSupabase(){
         .eq('id', cache.id);
 
       if(updateErr){ swal("Error al reclamar"); return; }
+
+      // Incrementar contador de XP / Cartas capturadas
+      STATE.cardsCaptured++;
+      checkPlayerLevelProgression();
 
       const { data: existingCards } = await supabase
         .from('player_cards')
@@ -591,6 +616,56 @@ async function loadGeocachesFromSupabase(){
   }
 }
 
+function checkPlayerLevelProgression() {
+  const xpDisplay = document.getElementById("playerXpDisplay");
+
+  if(STATE.cardsCaptured === 5 && STATE.playerLevel < 2) {
+    STATE.playerLevel = 2;
+    swal("🌟 ¡SUBIDÓN DE XP! (Nivel 2)", "¡Has capturado 5 cartas! Has desbloqueado un **Multiplicador de XP** y una aureola brillante visible para todos en el mapa.", "success");
+    updateUserPositionOnMap();
+  } else if(STATE.cardsCaptured === 10 && STATE.playerLevel < 3) {
+    STATE.playerLevel = 3;
+    showPerkSelectionModal();
+  }
+
+  if(xpDisplay) {
+    if(STATE.playerLevel === 1) xpDisplay.innerText = `Nivel 1 (${STATE.cardsCaptured}/5)`;
+    else if(STATE.playerLevel === 2) xpDisplay.innerText = `⭐ Nivel 2 (${STATE.cardsCaptured}/10)`;
+    else xpDisplay.innerText = `🔥 Nivel 3 Máximo`;
+  }
+}
+
+function showPerkSelectionModal() {
+  const perkModal = document.createElement("div");
+  perkModal.className = "modal";
+  perkModal.innerHTML = `
+    <div>
+      <h2>⚡ ¡ELECCIÓN DE ROL TÁCTICO! (Nivel 3)</h2>
+      <p>Has alcanzado 10 cartas capturadas. Selecciona una ventaja única:</p>
+      <div style="text-align:left; font-size:13px; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin:10px 0;">
+        <label><input type="radio" name="perkChoice" value="gladiator" checked> <b>⚔️ Gladiador:</b> +30 de Ataque extra en el primer asalto de tus duelos PvP.</label><br><br>
+        <label><input type="radio" name="perkChoice" value="tank"> <b>🛡️ Tanque:</b> +25 de Defensa extra y radio de captura ampliado a 95m.</label><br><br>
+        <label><input type="radio" name="perkChoice" value="explorer"> <b>⚡ Explorador:</b> Duplica la velocidad de tus bonificaciones de puntuación.</label>
+      </div><br>
+      <button onclick="window.confirmPerkSelection()">Confirmar Habilidad 🚀</button>
+    </div>
+  `;
+  document.body.appendChild(perkModal);
+
+  window.confirmPerkSelection = function() {
+    const radios = document.getElementsByName("perkChoice");
+    for(let r of radios) {
+      if(r.checked) {
+        STATE.selectedPerk = r.value;
+        break;
+      }
+    }
+    perkModal.remove();
+    updateUserPositionOnMap();
+    swal("¡Habilidad Activada! 🎯", `Has seleccionado tu rol táctico con éxito. ¡A por la victoria!`, "success");
+  };
+}
+
 function updatePlayerMarkers(presenceState) {
   let totalPlayers = 0;
   const now = Date.now();
@@ -610,18 +685,26 @@ function updatePlayerMarkers(presenceState) {
       if (email === STATE.user.email) return;
 
       const color = data.team === 'red' ? '#e63946' : '#1d3557';
+      let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
+      let enemyBadge = "";
+      if(data.level && data.level >= 2) {
+        enemyGlow = "box-shadow: 0 0 14px #e9c46a; border: 2px solid #e9c46a;";
+        enemyBadge = `<div style="position:absolute; top:-10px; right:-10px; background:#e9c46a; color:#073b4c; font-size:9px; font-weight:bold; padding:1px 3px; border-radius:4px;">⭐L${data.level}</div>`;
+      }
+
       const playerIcon = L.divIcon({
         className: "player-icon",
-        html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
+        html: `<div style="position:relative; background:${color}; width:18px; height:18px; border-radius:50%; border:2px solid white; ${enemyGlow}">${enemyBadge}</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
       });
 
       if (playerMarkers[email]) {
         playerMarkers[email].setLatLng([data.lat, data.lng]);
+        playerMarkers[email].setIcon(playerIcon);
       } else {
         const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-        marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team.toUpperCase()})`);
+        marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team.toUpperCase()})<br>Nivel: ${data.level || 1}`);
         playerMarkers[email] = marker;
       }
 
@@ -686,6 +769,9 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
     if(sel >= 0 && window.storedCards[sel]) {
       myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
     }
+    // Bonificación de rol Gladiador en ronda 1
+    if(STATE.selectedPerk === 'gladiator') myScore += 30;
+
     const enemyScore = Math.floor(Math.random() * 140) + 20;
 
     if(myScore >= enemyScore) window.myWins++;
@@ -706,6 +792,9 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
     if(sel >= 0 && window.storedCards[sel]) {
       myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
     }
+    // Bonificación de rol Tanque (+15 extra en defensa/ataque general si aplica)
+    if(STATE.selectedPerk === 'tank') myScore += 15;
+
     const enemyScore = Math.floor(Math.random() * 140) + 20;
 
     if(myScore >= enemyScore) window.myWins++;
@@ -734,12 +823,15 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
     modal.remove();
 
     if(window.myWins > window.enemyWins) {
-      swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra ${eNick}. ¡Has sumado +150 puntos para tu equipo!`, "success");
+      let pointsWon = 150;
+      if(STATE.playerLevel >= 2) pointsWon = 180; // Multiplicador de XP
+
+      swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra ${eNick}. ¡Has sumado +${pointsWon} puntos para tu equipo!`, "success");
       
       const scoreKey = STATE.team === 'red' ? 'red_score' : 'blue_score';
       const { data: currentRoom } = await supabase.from('rooms').select(scoreKey).eq('code', STATE.roomCode).single();
       if(currentRoom) {
-        const newScore = (currentRoom[scoreKey] || 0) + 150;
+        const newScore = (currentRoom[scoreKey] || 0) + pointsWon;
         await supabase.from('rooms').update({ [scoreKey]: newScore }).eq('code', STATE.roomCode);
       }
     } else {
@@ -817,6 +909,7 @@ function setupRealtimePresence() {
           lat: STATE.userLat,
           lng: STATE.userLng,
           team: STATE.team,
+          level: STATE.playerLevel,
           online_at: new Date().toISOString()
         });
       }
