@@ -363,15 +363,18 @@ window.adminEnterRoom = function(code, duration, cityKey){
 window.deleteRoom = async function(codeToDelete){
   swal({
     title: "¿Borrar sala " + codeToDelete + "?",
-    text: "Esta acción eliminará la sala y todas sus cartas asociadas.",
+    text: "Esta acción eliminará la sala, las cartas del mapa y todo el inventario de los jugadores en esta partida.",
     icon: "warning",
-    buttons: ["Cancelar", "Sí, borrar"],
+    buttons: ["Cancelar", "Sí, borrar y hacer wipe"],
     dangerMode: true,
   }).then(async (willDelete) => {
     if (willDelete) {
       await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
+      await supabase.from('player_cards').delete().eq('room_code', codeToDelete);
       await supabase.from('rooms').delete().eq('code', codeToDelete);
-      swal("Sala eliminada con éxito", { icon: "success" });
+
+      swal("Partida borrada y Wipe realizado 🧹✨", "La base de datos de esta sala ha quedado completamente limpia para la siguiente partida.", "success");
+      
       document.getElementById("adminModal").remove();
       showAdminConfigScreen();
     }
@@ -479,7 +482,6 @@ function updateUserPositionOnMap(){
 
   const color = STATE.team === 'red' ? '#e63946' : '#1d3557';
   
-  // Insignia visual si es nivel 2 o superior (XP boost activo)
   let glowStyle = "box-shadow:0 0 10px rgba(0,0,0,0.6);";
   let badgeHTML = "";
   if(STATE.playerLevel >= 2) {
@@ -504,7 +506,7 @@ function updateUserPositionOnMap(){
   }
 
   let circleRadius = 60;
-  if(STATE.selectedPerk === 'tank') circleRadius = 75; // Ventaja del tanque
+  if(STATE.selectedPerk === 'tank') circleRadius = 75;
 
   if(STATE.rangeCircle){
     STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
@@ -555,7 +557,7 @@ async function loadGeocachesFromSupabase(){
 
     marker.on("click", async () => {
       let maxReach = 80;
-      if(STATE.selectedPerk === 'tank') maxReach = 95; // Alcance extendido
+      if(STATE.selectedPerk === 'tank') maxReach = 95;
 
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
       if(distance > maxReach){
@@ -570,7 +572,6 @@ async function loadGeocachesFromSupabase(){
 
       if(updateErr){ swal("Error al reclamar"); return; }
 
-      // Incrementar contador de XP / Cartas capturadas
       STATE.cardsCaptured++;
       checkPlayerLevelProgression();
 
@@ -769,7 +770,6 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
     if(sel >= 0 && window.storedCards[sel]) {
       myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
     }
-    // Bonificación de rol Gladiador en ronda 1
     if(STATE.selectedPerk === 'gladiator') myScore += 30;
 
     const enemyScore = Math.floor(Math.random() * 140) + 20;
@@ -792,7 +792,6 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
     if(sel >= 0 && window.storedCards[sel]) {
       myScore = window.storedCards[sel].attack + window.storedCards[sel].defense;
     }
-    // Bonificación de rol Tanque (+15 extra en defensa/ataque general si aplica)
     if(STATE.selectedPerk === 'tank') myScore += 15;
 
     const enemyScore = Math.floor(Math.random() * 140) + 20;
@@ -824,7 +823,7 @@ async function triggerTacticalPvPBattle(enemyEmail, enemyTeam, enemyNick) {
 
     if(window.myWins > window.enemyWins) {
       let pointsWon = 150;
-      if(STATE.playerLevel >= 2) pointsWon = 180; // Multiplicador de XP
+      if(STATE.playerLevel >= 2) pointsWon = 180;
 
       swal("✨ ¡VICTORIA TOTAL EN DUELO! ✨", `Has ganado ${window.myWins} de 3 rondas contra ${eNick}. ¡Has sumado +${pointsWon} puntos para tu equipo!`, "success");
       
