@@ -169,6 +169,9 @@ const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON
 const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ID de sesión único por pestaña para evitar que se solapen múltiples jugadores en el mismo navegador
+const SESSION_ID = Math.random().toString(36.substring(2, 9));
+
 const STATE = {
   user: { email: "", nick: "", playerClass: "" },
   roomCode: null,
@@ -185,7 +188,7 @@ const STATE = {
   playerLevel: 1,
   selectedPerk: null,
   lastBattleTime: 0,
-  inBattle: false // Bandera para evitar múltiples activaciones simultáneas
+  inBattle: false
 };
 
 const CARD_POOL = [
@@ -312,7 +315,7 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
   STATE.user.playerClass = playerClass;
-  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${playerClass.replace(/[^a-zA-Z]/g, '')}@game.com`;
+  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${playerClass.replace(/[^a-zA-Z]/g, '')}_${Math.random().toString(36).substring(2,6)}@game.com`;
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
 
@@ -579,6 +582,7 @@ function updateUserPositionOnMap(){
 
   if(roomChannel){
     roomChannel.track({
+      session_id: SESSION_ID,
       nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
       lat: STATE.userLat, lng: STATE.userLng,
       team: STATE.team, level: STATE.playerLevel,
@@ -716,10 +720,8 @@ function listenRoomChanges() {
 }
 
 function setupRealtimePresence() {
-  const presenceKey = STATE.user.email || STATE.user.nick;
-
   roomChannel = supabase.channel('room_' + STATE.roomCode, {
-    config: { presence: { key: presenceKey } }
+    config: { presence: { key: SESSION_ID } }
   });
 
   roomChannel
@@ -730,6 +732,8 @@ function setupRealtimePresence() {
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
+          session_id: SESSION_ID,
+          email: STATE.user.email,
           nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
           lat: STATE.userLat, 
           lng: STATE.userLng,
@@ -746,25 +750,25 @@ function updatePlayerMarkers(presenceState) {
   const activeKeys = Object.keys(presenceState);
 
   // 1. Eliminar marcadores de jugadores desconectados
-  Object.keys(playerMarkers).forEach(emailKey => {
-    if (!activeKeys.includes(emailKey)) {
-      if (playerMarkers[emailKey]) {
-        STATE.map.removeLayer(playerMarkers[emailKey]);
-        delete playerMarkers[emailKey];
+  Object.keys(playerMarkers).forEach(sessionKey => {
+    if (!activeKeys.includes(sessionKey)) {
+      if (playerMarkers[sessionKey]) {
+        STATE.map.removeLayer(playerMarkers[sessionKey]);
+        delete playerMarkers[sessionKey];
       }
     }
   });
 
   // 2. Crear o actualizar marcadores de los jugadores conectados
-  activeKeys.forEach(emailKey => {
-    const playerDatas = presenceState[emailKey];
+  activeKeys.forEach(sessionKey => {
+    const playerDatas = presenceState[sessionKey];
     if (!playerDatas || playerDatas.length === 0) return;
 
     const data = playerDatas[playerDatas.length - 1];
     totalPlayers++;
 
     // Evitar renderizar nuestro propio marcador como externo
-    if (emailKey === STATE.user.email) return;
+    if (sessionKey === SESSION_ID) return;
 
     const color = data.team === 'red' ? '#e63946' : '#1d3557';
     let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
@@ -782,35 +786,34 @@ function updatePlayerMarkers(presenceState) {
       iconAnchor: [9, 9]
     });
 
-    if (playerMarkers[emailKey]) {
-      playerMarkers[emailKey].setLatLng([data.lat, data.lng]);
-      playerMarkers[emailKey].setIcon(playerIcon);
+    if (playerMarkers[sessionKey]) {
+      playerMarkers[sessionKey].setLatLng([data.lat, data.lng]);
+      playerMarkers[sessionKey].setIcon(playerIcon);
     } else {
       const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
       marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team ? data.team.toUpperCase() : ''})<br>Nivel: ${data.level || 1}`);
-      playerMarkers[emailKey] = marker;
+      playerMarkers[sessionKey] = marker;
     }
   });
 
   const onlineEl = document.getElementById("onlineCount");
   if (onlineEl) onlineEl.innerText = totalPlayers;
 
-  // 3. Comprobar si hay enemigos cercanos para iniciar combate (separado del bucle principal de renderizado)
+  // 3. Comprobar si hay enemigos cercanos para iniciar combate
   checkCombatWithNearbyPlayers(presenceState);
 }
 
 function checkCombatWithNearbyPlayers(presenceState) {
-  // Si ya estamos procesando una batalla o estamos en cooldown, salimos para no bloquear los eventos de red
   if (STATE.inBattle) return;
   const now = Date.now();
-  if (now - STATE.lastBattleTime < 20000) return; // Cooldown ampliado a 20s para evitar bucles de combate seguidos
+  if (now - STATE.lastBattleTime < 20000) return; // Cooldown de 20s
 
   const activeKeys = Object.keys(presenceState);
   
-  activeKeys.forEach(emailKey => {
-    if (emailKey === STATE.user.email) return;
+  activeKeys.forEach(sessionKey => {
+    if (sessionKey === SESSION_ID) return;
 
-    const playerDatas = presenceState[emailKey];
+    const playerDatas = presenceState[sessionKey];
     if (!playerDatas || playerDatas.length === 0) return;
     const enemy = playerDatas[playerDatas.length - 1];
 
@@ -829,25 +832,15 @@ function checkCombatWithNearbyPlayers(presenceState) {
 async function triggerPlayerBattle(enemy) {
   swal({
     title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
-    text: `¡Te has cruzado con ${enemy.nick} (${enemy.team.toUpperCase()}) a menos de 15 metros!\n\n¿Qué deseas hacer?`,
-    icon: "warning",
-    buttons: {
-      cancel: {
-        text: "🏃 Rendirse (Pierdes 1 carta)",
-        value: "surrender",
-        visible: true,
-      },
-      attack: {
-        text: "💥 ¡Atacar!",
-        value: "attack",
-      },
-    },
-    closeOnClickOutside: false,
-    closeOnEsc: false
-  }).then(async (value) => {
-    if (value === "surrender") {
-      await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
-    } else if (value === "attack") {
+    text: `¡Te has cruzado con ${enemy.nick} (${enemy.team ? enemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
+    type: "warning",
+    showCancelButton: true,
+    confirmButtonText: "¡Atacar! 💥",
+    cancelButtonText: "Rendirse 🏃",
+    closeOnConfirm: true,
+    closeOnCancel: true
+  }, async function(isConfirm) {
+    if (isConfirm) {
       const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
       const enemyPower = (enemy.level || 1) * 10 + Math.random() * 50;
 
@@ -857,8 +850,9 @@ async function triggerPlayerBattle(enemy) {
         swal("¡Derrota! 💀", `El rival ${enemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
         await penalizePlayerCard("Has caído derrotado en combate.");
       }
+    } else {
+      await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
     }
-    // Liberamos la bandera de batalla para que el radar y la presencia sigan funcionando con normalidad
     STATE.inBattle = false;
   });
 }
