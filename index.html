@@ -938,8 +938,23 @@ function startTimer(durationSeconds) {
   }, 1000);
 }
 
-document.getElementById("btnExit").addEventListener("click", () => {
+document.getElementById("btnExit").addEventListener("click", async () => {
+  if (roomChannel) {
+    try {
+      await roomChannel.untrack();
+      supabase.removeChannel(roomChannel);
+    } catch (e) {
+      console.warn("Error al salir del canal:", e);
+    }
+  }
   window.location.reload();
+});
+
+window.addEventListener('pagehide', () => {
+  if (roomChannel) {
+    roomChannel.untrack();
+    supabase.removeChannel(roomChannel);
+  }
 });
 
 async function showAdminConfigScreen(){
