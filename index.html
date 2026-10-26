@@ -170,7 +170,7 @@ const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ID de sesión único por pestaña para evitar que se solapen múltiples jugadores en el mismo navegador
-const SESSION_ID = Math.random().toString(36.substring(2, 9));
+const SESSION_ID = Math.random().toString(36).substring(2, 9);
 
 const STATE = {
   user: { email: "", nick: "", playerClass: "" },
