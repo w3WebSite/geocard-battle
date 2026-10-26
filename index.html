@@ -585,7 +585,6 @@ function updateUserPositionOnMap(){
     }).addTo(STATE.map);
   }
 
-  // Enviar estado de presencia limitado (evita la saturación del rate limit de Supabase)
   const movedDist = getDistanceInMeters(lastTrackedLat, lastTrackedLng, STATE.userLat, STATE.userLng);
   if(roomChannel && (lastTrackedLat === 0 || movedDist > 5)) {
     lastTrackedLat = STATE.userLat;
@@ -752,21 +751,17 @@ function setupRealtimePresence() {
   roomChannel
     .on('presence', { event: 'sync' }, () => {
       const state = roomChannel.presenceState();
-      console.log("Sync presence state:", state);
       updatePlayerMarkers(state);
     })
     .on('presence', { event: 'join' }, () => {
       const state = roomChannel.presenceState();
-      console.log("Join presence state:", state);
       updatePlayerMarkers(state);
     })
     .on('presence', { event: 'leave' }, () => {
       const state = roomChannel.presenceState();
-      console.log("Leave presence state:", state);
       updatePlayerMarkers(state);
     })
     .subscribe(async (status) => {
-      console.log("Channel subscription status:", status);
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
           email: STATE.user.email,
@@ -871,8 +866,8 @@ function checkCombatWithNearbyPlayers(uniqueUsersMap) {
   });
 }
 
-async function triggerPlayerBattle(enemyData) {
-  const currentEnemy = enemyData; // Guardamos la referencia de forma segura
+function triggerPlayerBattle(enemyData) {
+  const currentEnemy = enemyData;
   
   swal({
     title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
@@ -902,35 +897,6 @@ async function triggerPlayerBattle(enemyData) {
     }, 2000);
   });
 }
-
-  swal({
-    title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
-    text: `¡Te has cruzado con ${enemy.nick} (${enemy.team ? enemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
-    type: "warning",
-    showCancelButton: true,
-    confirmButtonText: "¡Atacar! 💥",
-    cancelButtonText: "Rendirse 🏃",
-    closeOnConfirm: true,
-    closeOnCancel: true
-  }, async function(isConfirm) {
-    if (isConfirm) {
-      const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
-      const enemyPower = (enemy.level || 1) * 10 + Math.random() * 50;
-
-      if (playerPower >= enemyPower) {
-        swal("¡Victoria Gloriosa! 🏆", `Has derrotado a ${enemy.nick} en este sector. ¡Honor para el equipo!`, "success");
-      } else {
-        swal("¡Derrota! 💀", `El rival ${enemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
-        await penalizePlayerCard("Has caído derrotado en combate.");
-      }
-    } else {
-      await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
-    }
-    setTimeout(() => {
-      STATE.inBattle = false;
-    }, 2000);
-  });
-
 
 async function penalizePlayerCard(reasonText) {
   const { data: myCards, error } = await supabase
