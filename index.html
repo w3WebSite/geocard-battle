@@ -500,11 +500,10 @@ function startGeolocationTracking(){
   }
 }
 
-// 🚶 Función para generar cartas dinámicamente alrededor del jugador a medida que se mueve
+// 🚶 Función adaptada para insertar sólo las columnas existentes en tu tabla geocaches
 async function checkAndSpawnCardsAroundPlayer() {
   if (!STATE.roomCode) return;
 
-  // Comprobamos cuántas cartas activas hay cerca del jugador (en un radio de 300 metros)
   const { data: nearbyCards } = await supabase
     .from('geocaches')
     .select('*')
@@ -519,11 +518,9 @@ async function checkAndSpawnCardsAroundPlayer() {
     });
   }
 
-  // Si hay menos de 4 cartas cerca, generamos un par de cartas nuevas alrededor de la posición actual del jugador
   if (closeCount < 4) {
     const newCardsToSpawn = 2;
     for (let i = 0; i < newCardsToSpawn; i++) {
-      // Generar coordenadas aleatorias en un radio de 100 a 300 metros
       const radiusOffset = 0.001 + Math.random() * 0.002;
       const angle = Math.random() * 2 * Math.PI;
       const latOffset = radiusOffset * Math.cos(angle);
@@ -532,13 +529,9 @@ async function checkAndSpawnCardsAroundPlayer() {
       const spawnLat = STATE.userLat + latOffset;
       const spawnLng = STATE.userLng + lngOffset;
 
-      const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-
+      // Inserción limpia con las columnas básicas de tu tabla geocaches
       await supabase.from('geocaches').insert({
         room_code: STATE.roomCode,
-        card_name: randomTemplate.name,
-        attack: randomTemplate.attack,
-        defense: randomTemplate.defense,
         lat: spawnLat,
         lng: spawnLng,
         claimed: false
@@ -606,7 +599,7 @@ async function loadGeocachesFromSupabase(){
   if(error || !data) return;
 
   data.forEach(cache => {
-    if (mapMarkersList[cache.id]) return; // Si ya está pintado, no lo duplicamos
+    if (mapMarkersList[cache.id]) return;
 
     const cacheIcon = L.divIcon({
       className: "custom-card-icon",
@@ -632,26 +625,28 @@ async function loadGeocachesFromSupabase(){
       STATE.cardsCaptured++;
       checkPlayerLevelProgression();
 
-      const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', cache.card_name);
-
-      let finalAttack = cache.attack;
-      let finalDefense = cache.defense;
+      // Asignar una carta aleatoria de la plantilla al inventario del usuario al capturarla
+      const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+      let finalAttack = randomTemplate.attack;
+      let finalDefense = randomTemplate.defense;
       if(STATE.selectedPerk === 'berserker') {
         finalAttack += 15;
       }
+
+      const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', randomTemplate.name);
 
       if(existingCards && existingCards.length > 0) {
         const cardToUpgrade = existingCards[0];
         const newAttack = cardToUpgrade.attack + 15;
         const newDefense = cardToUpgrade.defense + 15;
         await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
-        swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${cache.card_name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
+        swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${randomTemplate.name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
       } else {
         await supabase.from('player_cards').insert({
           room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
-          card_name: cache.card_name, attack: finalAttack, defense: finalDefense, image_url: cache.image_url || ""
+          card_name: randomTemplate.name, attack: finalAttack, defense: finalDefense, image_url: ""
         });
-        swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${cache.card_name}`, "success");
+        swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${randomTemplate.name}`, "success");
       }
 
       if(mapMarkersList[cache.id]) {
