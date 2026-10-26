@@ -500,20 +500,20 @@ function startGeolocationTracking(){
   }
 }
 
-// 🚶 Función sincronizada con los nombres en español de tu Supabase (código_de_habitación, largo, afirmado)
+// 🚶 Función sincronizada con la tabla limpia "geocaches" (en inglés y sin tildes)
 async function checkAndSpawnCardsAroundPlayer() {
   if (!STATE.roomCode) return;
 
   const { data: nearbyCards } = await supabase
-    .from('geocachés')
+    .from('geocaches')
     .select('*')
-    .eq('código_de_habitación', STATE.roomCode)
-    .eq('afirmado', false);
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false);
 
   let closeCount = 0;
   if (nearbyCards) {
     nearbyCards.forEach(c => {
-      const dist = getDistanceInMeters(STATE.userLat, STATE.userLng, c.lat, c.largo);
+      const dist = getDistanceInMeters(STATE.userLat, STATE.userLng, c.lat, c.lng);
       if (dist < 400) closeCount++;
     });
   }
@@ -531,11 +531,11 @@ async function checkAndSpawnCardsAroundPlayer() {
 
       const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
 
-      await supabase.from('geocachés').insert({
-        código_de_habitación: STATE.roomCode,
+      await supabase.from('geocaches').insert({
+        room_code: STATE.roomCode,
         lat: spawnLat,
-        largo: spawnLng,
-        afirmado: false,
+        lng: spawnLng,
+        claimed: false,
         card_name: randomTemplate.name,
         card_type: randomTemplate.type || "Ataque",
         attack: randomTemplate.attack,
@@ -601,7 +601,7 @@ function updateUserPositionOnMap(){
 }
 
 async function loadGeocachesFromSupabase(){
-  const { data, error } = await supabase.from('geocachés').select('*').eq('código_de_habitación', STATE.roomCode).eq('afirmado', false);
+  const { data, error } = await supabase.from('geocaches').select('*').eq('room_code', STATE.roomCode).eq('claimed', false);
   if(error || !data) return;
 
   data.forEach(cache => {
@@ -613,20 +613,20 @@ async function loadGeocachesFromSupabase(){
       iconSize: [36, 48], iconAnchor: [18, 24]
     });
 
-    const marker = L.marker([cache.lat, cache.largo], { icon: cacheIcon }).addTo(STATE.map);
+    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
     mapMarkersList[cache.id] = marker;
 
     marker.on("click", async () => {
       let maxReach = 80;
       if(STATE.selectedPerk === 'tank') maxReach = 105;
 
-      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.largo);
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
       if(distance > maxReach){
         swal("Estás muy lejos (" + Math.round(distance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
         return;
       }
 
-      await supabase.from('geocachés').update({ afirmado: true, equipo: STATE.team }).eq('id', cache.id);
+      await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
 
       STATE.cardsCaptured++;
       checkPlayerLevelProgression();
@@ -663,15 +663,15 @@ async function loadGeocachesFromSupabase(){
 }
 
 function listenGeocacheChanges() {
-  supabase.channel('public:geocachés')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocachés', filter: `código_de_habitación=eq.${STATE.roomCode}` }, payload => {
+  supabase.channel('public:geocaches')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
       const updatedCache = payload.new;
-      if (updatedCache.afirmado && mapMarkersList[updatedCache.id]) {
+      if (updatedCache.claimed && mapMarkersList[updatedCache.id]) {
         STATE.map.removeLayer(mapMarkersList[updatedCache.id]);
         delete mapMarkersList[updatedCache.id];
       }
     })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocachés', filter: `código_de_habitación=eq.${STATE.roomCode}` }, payload => {
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
       loadGeocachesFromSupabase();
     })
     .subscribe();
