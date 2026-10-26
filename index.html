@@ -183,7 +183,8 @@ const STATE = {
   watchPositionId: null,
   cardsCaptured: 0,
   playerLevel: 1,
-  selectedPerk: null
+  selectedPerk: null,
+  lastBattleTime: 0 // Cooldown para evitar avisos de combate repetitivos seguidos
 };
 
 const CARD_POOL = [
@@ -265,6 +266,7 @@ window.showHowToPlay = function(){
         <p><b>1. 🌍 Sin Fronteras:</b> Juega desde cualquier lugar del mundo usando tu ubicación GPS real.</p>
         <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
         <p><b>3. 🚶 Movimiento Dinámico:</b> Las cartas aparecen automáticamente a tu alrededor a medida que te desplazas.</p>
+        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros para luchar y defender tu territorio.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -791,6 +793,99 @@ function updatePlayerMarkers(presenceState) {
 
   const onlineEl = document.getElementById("onlineCount");
   if (onlineEl) onlineEl.innerText = totalPlayers;
+
+  // 3. Comprobar si hay enemigos cercanos para iniciar combate por proximidad
+  checkCombatWithNearbyPlayers(presenceState);
+}
+
+// NUEVA FUNCIÓN: Comprueba la distancia con jugadores de equipos contrarios
+function checkCombatWithNearbyPlayers(presenceState) {
+  const now = Date.now();
+  // Cooldown de 15 segundos para evitar que la alerta salte continuamente cada segundo
+  if (now - STATE.lastBattleTime < 15000) return;
+
+  const activeKeys = Object.keys(presenceState);
+  
+  activeKeys.forEach(emailKey => {
+    if (emailKey === STATE.user.email) return;
+
+    const playerDatas = presenceState[emailKey];
+    if (!playerDatas || playerDatas.length === 0) return;
+    const enemy = playerDatas[playerDatas.length - 1];
+
+    // Solo salta si el otro jugador es de un equipo diferente
+    if (enemy.team && enemy.team !== STATE.team) {
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
+      
+      // Si el enemigo está a 15 metros o menos
+      if (distance <= 15) {
+        STATE.lastBattleTime = now;
+        triggerPlayerBattle(enemy);
+      }
+    }
+  });
+}
+
+// NUEVA FUNCIÓN: Ventana de alerta y resolución del combate/rendición
+async function triggerPlayerBattle(enemy) {
+  swal({
+    title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
+    text: `¡Te has cruzado con ${enemy.nick} (${enemy.team.toUpperCase()}) a menos de 15 metros!\n\n¿Qué deseas hacer?`,
+    icon: "warning",
+    buttons: {
+      cancel: {
+        text: "🏃 Rendirse (Pierdes 1 carta)",
+        value: "surrender",
+        visible: true,
+      },
+      attack: {
+        text: "💥 ¡Atacar!",
+        value: "attack",
+      },
+    },
+  }).then(async (value) => {
+    if (value === "surrender") {
+      await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
+    } else if (value === "attack") {
+      const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
+      const enemyPower = (enemy.level || 1) * 10 + Math.random() * 50;
+
+      if (playerPower >= enemyPower) {
+        swal("¡Victoria Gloriosa! 🏆", `Has derrotado a ${enemy.nick} en este sector. ¡Honor para el equipo!`, "success");
+      } else {
+        swal("¡Derrota! 💀", `El rival ${enemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
+        await penalizePlayerCard("Has caído derrotado en combate.");
+      }
+    }
+  });
+}
+
+// NUEVA FUNCIÓN: Penalización de perder una carta del inventario en Supabase
+async function penalizePlayerCard(reasonText) {
+  const { data: myCards, error } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  if (error || !myCards || myCards.length === 0) {
+    swal("¡Te has librado!", `${reasonText} Sin embargo, no tenías ninguna carta en tu inventario, ¡así que conservas tus bienes!`, "info");
+    return;
+  }
+
+  // Seleccionar aleatoriamente una carta para retirar
+  const cardToLose = myCards[Math.floor(Math.random() * myCards.length)];
+
+  const { error: deleteErr } = await supabase
+    .from('player_cards')
+    .delete()
+    .eq('id', cardToLose.id);
+
+  if (!deleteErr) {
+    STATE.cardsCaptured = Math.max(0, STATE.cardsCaptured - 1);
+    checkPlayerLevelProgression(); // Actualiza barra de XP y nivel si procede
+    swal("¡Carta Perdida! 📉", `${reasonText}\nHas perdido la carta: "${cardToLose.card_name}".`, "error");
+  }
 }
 
 function startTimer(durationSeconds) {
