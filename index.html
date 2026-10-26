@@ -928,7 +928,7 @@ async function triggerPlayerBattle(enemy) {
       STATE.inBattle = false;
     }, 2000);
   });
-}
+
 
 async function penalizePlayerCard(reasonText) {
   const { data: myCards, error } = await supabase
