@@ -713,66 +713,84 @@ function listenRoomChanges() {
 }
 
 function setupRealtimePresence() {
+  const presenceKey = STATE.user.email || STATE.user.nick;
+
   roomChannel = supabase.channel('room_' + STATE.roomCode, {
-    config: { presence: { key: STATE.user.email } }
+    config: { presence: { key: presenceKey } }
   });
 
-  roomChannel.on('presence', { event: 'sync' }, () => {
-    updatePlayerMarkers(roomChannel.presenceState());
-  }).subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      await roomChannel.track({
-        nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
-        lat: STATE.userLat, lng: STATE.userLng,
-        team: STATE.team, level: STATE.playerLevel,
-        online_at: new Date().toISOString()
-      });
-    }
-  });
+  roomChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = roomChannel.presenceState();
+      updatePlayerMarkers(state);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await roomChannel.track({
+          nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
+          lat: STATE.userLat, 
+          lng: STATE.userLng,
+          team: STATE.team, 
+          level: STATE.playerLevel,
+          online_at: new Date().toISOString()
+        });
+      }
+    });
 }
 
 function updatePlayerMarkers(presenceState) {
   let totalPlayers = 0;
-  Object.keys(playerMarkers).forEach(email => {
-    if (!presenceState[email]) {
-      STATE.map.removeLayer(playerMarkers[email]);
-      delete playerMarkers[email];
+  const activeKeys = Object.keys(presenceState);
+
+  // 1. Eliminar marcadores de jugadores desconectados
+  Object.keys(playerMarkers).forEach(emailKey => {
+    if (!activeKeys.includes(emailKey)) {
+      if (playerMarkers[emailKey]) {
+        STATE.map.removeLayer(playerMarkers[emailKey]);
+        delete playerMarkers[emailKey];
+      }
     }
   });
 
-  Object.keys(presenceState).forEach(email => {
-    const playerDatas = presenceState[email];
-    totalPlayers += playerDatas.length;
-    playerDatas.forEach(data => {
-      if (email === STATE.user.email) return;
+  // 2. Crear o actualizar marcadores de los jugadores conectados
+  activeKeys.forEach(emailKey => {
+    const playerDatas = presenceState[emailKey];
+    if (!playerDatas || playerDatas.length === 0) return;
 
-      const color = data.team === 'red' ? '#e63946' : '#1d3557';
-      let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
-      let enemyBadge = "";
-      if(data.level && data.level >= 2) {
-        enemyGlow = "box-shadow: 0 0 14px #e9c46a; border: 2px solid #e9c46a;";
-        enemyBadge = `<div style="position:absolute; top:-10px; right:-10px; background:#e9c46a; color:#073b4c; font-size:9px; font-weight:bold; padding:1px 3px; border-radius:4px;">⭐L${data.level}</div>`;
-      }
+    const data = playerDatas[playerDatas.length - 1];
+    totalPlayers++;
 
-      const playerIcon = L.divIcon({
-        className: "player-icon",
-        html: `<div style="position:relative; background:${color}; width:18px; height:18px; border-radius:50%; border:2px solid white; ${enemyGlow}">${enemyBadge}</div>`,
-        iconSize: [18, 18], iconAnchor: [9, 9]
-      });
+    // Evitar renderizar nuestro propio marcador como externo
+    if (emailKey === STATE.user.email) return;
 
-      if (playerMarkers[email]) {
-        playerMarkers[email].setLatLng([data.lat, data.lng]);
-        playerMarkers[email].setIcon(playerIcon);
-      } else {
-        const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-        marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team.toUpperCase()})<br>Nivel: ${data.level || 1}`);
-        playerMarkers[email] = marker;
-      }
+    const color = data.team === 'red' ? '#e63946' : '#1d3557';
+    let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
+    let enemyBadge = "";
+
+    if (data.level && data.level >= 2) {
+      enemyGlow = "box-shadow: 0 0 14px #e9c46a; border: 2px solid #e9c46a;";
+      enemyBadge = `<div style="position:absolute; top:-10px; right:-10px; background:#e9c46a; color:#073b4c; font-size:9px; font-weight:bold; padding:1px 3px; border-radius:4px;">⭐L${data.level}</div>`;
+    }
+
+    const playerIcon = L.divIcon({
+      className: "player-icon",
+      html: `<div style="position:relative; background:${color}; width:18px; height:18px; border-radius:50%; border:2px solid white; ${enemyGlow}">${enemyBadge}</div>`,
+      iconSize: [18, 18], 
+      iconAnchor: [9, 9]
     });
+
+    if (playerMarkers[emailKey]) {
+      playerMarkers[emailKey].setLatLng([data.lat, data.lng]);
+      playerMarkers[emailKey].setIcon(playerIcon);
+    } else {
+      const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
+      marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team ? data.team.toUpperCase() : ''})<br>Nivel: ${data.level || 1}`);
+      playerMarkers[emailKey] = marker;
+    }
   });
 
   const onlineEl = document.getElementById("onlineCount");
-  if(onlineEl) onlineEl.innerText = totalPlayers;
+  if (onlineEl) onlineEl.innerText = totalPlayers;
 }
 
 function startTimer(durationSeconds) {
