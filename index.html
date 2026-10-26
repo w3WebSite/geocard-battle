@@ -60,7 +60,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* Estilos del Chat Flotante con altura fija para que no crezca infinitamente */
+/* Estilos del Chat Flotante */
 #chatContainer{
   position: fixed; bottom: 15px; left: 15px; width: 300px; height: 210px;
   background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);
@@ -84,7 +84,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   margin: 0 0 0 6px; padding: 6px 10px; font-size: 12px;
 }
 
-/* Estilo inmersivo y táctico para el mapa (Modo Oscuro / Cyber-Estrategia) */
+/* Estilo inmersivo y táctico para el mapa */
 .leaflet-tile-pane {
   filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);
 }
@@ -143,7 +143,6 @@ option { background: #0f172a; color: white; }
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
-<!-- Panel de Chat en Juego con altura fija y control de scroll -->
 <div id="chatContainer">
   <div id="chatHeader">💬 Chat de Partida</div>
   <div id="chatMessages"></div>
@@ -215,7 +214,6 @@ const CARD_POOL = [
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
-let battleCooldowns = {};
 let mapMarkersList = {};
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -229,7 +227,6 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 window.addEventListener('DOMContentLoaded', () => {
   showLoginScreen();
   document.getElementById("btnInventory").addEventListener("click", showPlayerInventory);
-  
   document.getElementById("chatSend").addEventListener("click", sendChatMessage);
   document.getElementById("chatInput").addEventListener("keypress", (e) => {
     if(e.key === 'Enter') sendChatMessage();
@@ -243,7 +240,7 @@ function showLoginScreen(){
   modalDiv.innerHTML = `
     <div>
       <h2>🎴 GeoCard Battle Europa</h2>
-      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick y Sala (tus cartas y nivel se recuperarán):</b></p>
+      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick y Sala:</b></p>
       <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)"><br>
       <select id="playerClassSelect">
         <option value="⚔️ Guerrero">⚔️ Guerrero (Ataque)</option>
@@ -275,9 +272,8 @@ window.showHowToPlay = function(){
       <h2>📜 Guía de Supervivencia y Progresión</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
         <p><b>1. 🎴 Persistencia:</b> Si sales y entras con el mismo Nick, recuperas tu inventario y tu nivel exacto.</p>
-        <p><b>2. ⭐ Sistema de XP y Niveles Infinitos:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
-        <p><b>3. 💬 Chat y Comunidad:</b> Usa el chat en vivo integrado o conéctate al servidor de Discord oficial.</p>
-        <p><b>4. ⏱️ Auto-destrucción:</b> Los mensajes del chat desaparecen automáticamente transcurrido 1 minuto.</p>
+        <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
+        <p><b>3. 🚶 Movimiento Dinámico:</b> Las cartas aparecen a tu alrededor a medida que te vas desplazando por el mapa.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -464,7 +460,6 @@ function appendChatMessage(m) {
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 
-  // ⏱️ Auto-borrado transcurrido 1 minuto (60000 ms)
   setTimeout(() => {
     if (div && div.parentNode) {
       div.style.opacity = "0";
@@ -492,6 +487,7 @@ function startGeolocationTracking(){
         STATE.userLat = position.coords.latitude;
         STATE.userLng = position.coords.longitude;
         updateUserPositionOnMap();
+        checkAndSpawnCardsAroundPlayer(); // 🚀 Genera cartas dinámicamente al moverse
       },
       (error) => {
         console.warn("Error de geolocalización:", error.message);
@@ -501,6 +497,54 @@ function startGeolocationTracking(){
     );
   } else {
     updateUserPositionOnMap();
+  }
+}
+
+// 🚶 Función para generar cartas dinámicamente alrededor del jugador a medida que se mueve
+async function checkAndSpawnCardsAroundPlayer() {
+  if (!STATE.roomCode) return;
+
+  // Comprobamos cuántas cartas activas hay cerca del jugador (en un radio de 300 metros)
+  const { data: nearbyCards } = await supabase
+    .from('geocaches')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false);
+
+  let closeCount = 0;
+  if (nearbyCards) {
+    nearbyCards.forEach(c => {
+      const dist = getDistanceInMeters(STATE.userLat, STATE.userLng, c.lat, c.lng);
+      if (dist < 400) closeCount++;
+    });
+  }
+
+  // Si hay menos de 4 cartas cerca, generamos un par de cartas nuevas alrededor de la posición actual del jugador
+  if (closeCount < 4) {
+    const newCardsToSpawn = 2;
+    for (let i = 0; i < newCardsToSpawn; i++) {
+      // Generar coordenadas aleatorias en un radio de 100 a 300 metros
+      const radiusOffset = 0.001 + Math.random() * 0.002;
+      const angle = Math.random() * 2 * Math.PI;
+      const latOffset = radiusOffset * Math.cos(angle);
+      const lngOffset = radiusOffset * Math.sin(angle) / Math.cos(STATE.userLat * Math.PI / 180);
+
+      const spawnLat = STATE.userLat + latOffset;
+      const spawnLng = STATE.userLng + lngOffset;
+
+      const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+
+      await supabase.from('geocaches').insert({
+        room_code: STATE.roomCode,
+        card_name: randomTemplate.name,
+        attack: randomTemplate.attack,
+        defense: randomTemplate.defense,
+        lat: spawnLat,
+        lng: spawnLng,
+        claimed: false
+      });
+    }
+    loadGeocachesFromSupabase();
   }
 }
 
@@ -561,8 +605,9 @@ async function loadGeocachesFromSupabase(){
   const { data, error } = await supabase.from('geocaches').select('*').eq('room_code', STATE.roomCode).eq('claimed', false);
   if(error || !data) return;
 
-  const group = [];
   data.forEach(cache => {
+    if (mapMarkersList[cache.id]) return; // Si ya está pintado, no lo duplicamos
+
     const cacheIcon = L.divIcon({
       className: "custom-card-icon",
       html: `<div class="modernCardMarker">🎴</div>`,
@@ -571,7 +616,6 @@ async function loadGeocachesFromSupabase(){
 
     const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
     mapMarkersList[cache.id] = marker;
-    group.push(marker);
 
     marker.on("click", async () => {
       let maxReach = 80;
@@ -616,12 +660,6 @@ async function loadGeocachesFromSupabase(){
       }
     });
   });
-
-  if(group.length > 0 && !STATE.mapInitializedBounds){
-    const featureGroup = L.featureGroup(group);
-    STATE.map.fitBounds(featureGroup.getBounds().pad(0.2));
-    STATE.mapInitializedBounds = true;
-  }
 }
 
 function listenGeocacheChanges() {
@@ -632,6 +670,9 @@ function listenGeocacheChanges() {
         STATE.map.removeLayer(mapMarkersList[updatedCache.id]);
         delete mapMarkersList[updatedCache.id];
       }
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      loadGeocachesFromSupabase();
     })
     .subscribe();
 }
@@ -803,11 +844,9 @@ async function showAdminConfigScreen(){
     <div>
       <h2>👑 Panel del Administrador</h2>
       <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
-        <h4 style="margin:0 0 8px 0; color:#38bdf8;">✨ Crear Nueva Partida:</h4>
-        <label style="font-size:11px; font-weight:bold;">Código de Sala:</label><br>
-        <input id="adminRoomCode" value="EUROPA1" style="width:90%"><br>
-        <label style="font-size:11px; font-weight:bold;">Ciudad / Región:</label><br>
-        <select id="adminCitySelect" style="width:90%;">
+        <b>Crear Nueva Sala de Juego:</b><br>
+        <input id="adminRoomCode" placeholder="Código (Ej: EUROPA2026)"><br>
+        <select id="adminCitySelect">
           <option value="deltebre">Deltebre (Delta del Ebro)</option>
           <option value="barcelona">Barcelona</option>
           <option value="madrid">Madrid</option>
@@ -815,84 +854,69 @@ async function showAdminConfigScreen(){
           <option value="roma">Roma</option>
           <option value="berlin">Berlín</option>
         </select><br>
-        <label style="font-size:11px; font-weight:bold;">Duración (minutos):</label><br>
-        <input id="adminDuration" type="number" value="30" style="width:90%"><br><br>
-        <button onclick="window.createNewRoom()" style="width:92%;">Crear Sala y Generar Cartas 🗺️</button>
+        <select id="adminDurationSelect">
+          <option value="15">15 minutos</option>
+          <option value="30" selected>30 minutos</option>
+          <option value="60">60 minutos</option>
+        </select><br>
+        <button onclick="window.createRoom()" style="width:100%;">Crear Sala 🚀</button>
       </div>
-      <h4 style="margin:10px 0 5px 0; text-align:left; color:#cbd5e1;">📋 Salas Existentes:</h4>
-      <div style="max-height:160px; overflow-y:auto; text-align:left; padding-right:5px;">${roomListHTML}</div><br>
-      <button onclick="window.location.reload()">Cerrar / Volver 🚪</button>
+      <h3>Salas Activas:</h3>
+      <div style="max-height:180px; overflow-y:auto; text-align:left; padding-right:5px;">${roomListHTML}</div><br>
+      <button onclick="window.location.reload()" class="btn-secondary">Cerrar Sesión Admin ✖️</button>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
 
-window.createNewRoom = async function(){
+window.createRoom = async function(){
   const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
   const city = document.getElementById("adminCitySelect").value;
-  const duration = parseInt(document.getElementById("adminDuration").value) || 30;
+  const duration = parseInt(document.getElementById("adminDurationSelect").value);
 
-  if(!code){ swal("Error", "Ingresa un código de sala válido", "warning"); return; }
+  if(!code) { swal("Error", "Ingresa un código para la sala", "warning"); return; }
 
-  await supabase.from('rooms').delete().eq('code', code);
-  await supabase.from('geocaches').delete().eq('room_code', code);
-
-  const { error: roomErr } = await supabase.from('rooms').insert({
-    code: code, city: city, duration: duration, red_score: 0, blue_score: 0, active: true
+  const { error } = await supabase.from('rooms').insert({
+    code: code,
+    city: city,
+    duration: duration,
+    active: true,
+    red_score: 0,
+    blue_score: 0
   });
 
-  if(roomErr){ swal("Error", "No se pudo crear la sala", "error"); return; }
-
-  const baseLat = CITIES[city].lat;
-  const baseLng = CITIES[city].lng;
-  const geocachesToInsert = [];
-
-  for(let i = 0; i < 15; i++){
-    const randomCard = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-    const latOffset = (Math.random() - 0.5) * 0.035;
-    const lngOffset = (Math.random() - 0.5) * 0.035;
-
-    geocachesToInsert.push({
-      room_code: code,
-      card_name: randomCard.name,
-      attack: randomCard.attack,
-      defense: randomCard.defense,
-      lat: baseLat + latOffset,
-      lng: baseLng + lngOffset,
-      claimed: false,
-      team: null
-    });
+  if(error) {
+    swal("Error", "No se pudo crear la sala (quizás ya exista)", "error");
+    return;
   }
 
-  await supabase.from('geocaches').insert(geocachesToInsert);
-  swal("¡Sala Creada!", `La sala "${code}" y sus 15 cartas tácticas han sido desplegadas con éxito.`, "success");
+  swal("¡Sala Creada!", `La sala ${code} está lista.`, "success");
+  document.getElementById("adminModal").remove();
+  showAdminConfigScreen();
+};
+
+window.deleteRoom = async function(code){
+  await supabase.from('rooms').delete().eq('code', code);
+  swal("Eliminada", `La sala ${code} fue borrada.`, "info");
   document.getElementById("adminModal").remove();
   showAdminConfigScreen();
 };
 
 window.adminEnterRoom = function(code, duration, city){
   STATE.isAdmin = false;
-  STATE.user.nick = "Administrador";
+  STATE.user.nick = "Admin Spectator";
   STATE.user.playerClass = "⚔️ Guerrero";
-  STATE.user.email = "admin_jugador@game.com";
+  STATE.user.email = "admin_spectator@game.com";
   STATE.roomCode = code;
   STATE.team = "red";
 
-  if(CITIES[city]){
+  if(CITIES[city]) {
     STATE.userLat = CITIES[city].lat;
     STATE.userLng = CITIES[city].lng;
   }
 
   document.getElementById("adminModal").remove();
   launchGameEngine(duration);
-};
-
-window.deleteRoom = async function(code){
-  await supabase.from('rooms').delete().eq('code', code);
-  await supabase.from('geocaches').delete().eq('room_code', code);
-  swal("Eliminada", `La sala ${code} ha sido borrada.`, "success");
-  document.getElementById("adminModal").remove();
-  showAdminConfigScreen();
 };
 </script>
 </body>
