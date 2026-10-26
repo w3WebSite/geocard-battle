@@ -169,9 +169,6 @@ const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON
 const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ID de sesión único por pestaña para evitar que se solapen múltiples jugadores en el mismo navegador
-const SESSION_ID = Math.random().toString(36).substring(2, 9);
-
 const STATE = {
   user: { email: "", nick: "", playerClass: "" },
   roomCode: null,
@@ -315,7 +312,9 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
   STATE.user.playerClass = playerClass;
-  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${playerClass.replace(/[^a-zA-Z]/g, '')}_${Math.random().toString(36).substring(2,6)}@game.com`;
+  // Añadimos un identificador único por pestaña al email para que nicks repetidos no colisionen
+  const uniqueTabId = Math.random().toString(36).substring(2, 8);
+  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${uniqueTabId}@game.com`;
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
 
@@ -582,10 +581,12 @@ function updateUserPositionOnMap(){
 
   if(roomChannel){
     roomChannel.track({
-      session_id: SESSION_ID,
+      email: STATE.user.email,
       nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
-      lat: STATE.userLat, lng: STATE.userLng,
-      team: STATE.team, level: STATE.playerLevel,
+      lat: STATE.userLat, 
+      lng: STATE.userLng,
+      team: STATE.team, 
+      level: STATE.playerLevel,
       online_at: new Date().toISOString()
     });
   }
@@ -720,8 +721,9 @@ function listenRoomChanges() {
 }
 
 function setupRealtimePresence() {
+  // Usamos el email único de la sesión como clave de presencia en el canal
   roomChannel = supabase.channel('room_' + STATE.roomCode, {
-    config: { presence: { key: SESSION_ID } }
+    config: { presence: { key: STATE.user.email } }
   });
 
   roomChannel
@@ -732,7 +734,6 @@ function setupRealtimePresence() {
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
-          session_id: SESSION_ID,
           email: STATE.user.email,
           nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
           lat: STATE.userLat, 
@@ -750,25 +751,27 @@ function updatePlayerMarkers(presenceState) {
   const activeKeys = Object.keys(presenceState);
 
   // 1. Eliminar marcadores de jugadores desconectados
-  Object.keys(playerMarkers).forEach(sessionKey => {
-    if (!activeKeys.includes(sessionKey)) {
-      if (playerMarkers[sessionKey]) {
-        STATE.map.removeLayer(playerMarkers[sessionKey]);
-        delete playerMarkers[sessionKey];
+  Object.keys(playerMarkers).forEach(emailKey => {
+    if (!activeKeys.includes(emailKey)) {
+      if (playerMarkers[emailKey]) {
+        STATE.map.removeLayer(playerMarkers[emailKey]);
+        delete playerMarkers[emailKey];
       }
     }
   });
 
-  // 2. Crear o actualizar marcadores de los jugadores conectados
-  activeKeys.forEach(sessionKey => {
-    const playerDatas = presenceState[sessionKey];
+  // 2. Crear o actualizar marcadores de los jugadores conectados contando cada clave única de presencia
+  activeKeys.forEach(emailKey => {
+    const playerDatas = presenceState[emailKey];
     if (!playerDatas || playerDatas.length === 0) return;
 
-    const data = playerDatas[playerDatas.length - 1];
+    // Cada clave única en presenceState representa un cliente conectado
     totalPlayers++;
 
+    const data = playerDatas[playerDatas.length - 1];
+
     // Evitar renderizar nuestro propio marcador como externo
-    if (sessionKey === SESSION_ID) return;
+    if (emailKey === STATE.user.email) return;
 
     const color = data.team === 'red' ? '#e63946' : '#1d3557';
     let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
@@ -786,13 +789,13 @@ function updatePlayerMarkers(presenceState) {
       iconAnchor: [9, 9]
     });
 
-    if (playerMarkers[sessionKey]) {
-      playerMarkers[sessionKey].setLatLng([data.lat, data.lng]);
-      playerMarkers[sessionKey].setIcon(playerIcon);
+    if (playerMarkers[emailKey]) {
+      playerMarkers[emailKey].setLatLng([data.lat, data.lng]);
+      playerMarkers[emailKey].setIcon(playerIcon);
     } else {
       const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
       marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team ? data.team.toUpperCase() : ''})<br>Nivel: ${data.level || 1}`);
-      playerMarkers[sessionKey] = marker;
+      playerMarkers[emailKey] = marker;
     }
   });
 
@@ -810,10 +813,10 @@ function checkCombatWithNearbyPlayers(presenceState) {
 
   const activeKeys = Object.keys(presenceState);
   
-  activeKeys.forEach(sessionKey => {
-    if (sessionKey === SESSION_ID) return;
+  activeKeys.forEach(emailKey => {
+    if (emailKey === STATE.user.email) return;
 
-    const playerDatas = presenceState[sessionKey];
+    const playerDatas = presenceState[emailKey];
     if (!playerDatas || playerDatas.length === 0) return;
     const enemy = playerDatas[playerDatas.length - 1];
 
