@@ -176,7 +176,7 @@ const STATE = {
   isAdmin: false,
   map: null,
   mapInitialized: false,
-  userLat: 40.7164, // Coordenada por defecto provisional hasta obtener GPS
+  userLat: 40.7164,
   userLng: 0.7365,
   userMarker: null,
   rangeCircle: null,
@@ -185,6 +185,7 @@ const STATE = {
   playerLevel: 1,
   selectedPerk: null,
   lastBattleTime: 0,
+  lastEnemyBattled: null, // Evita re-enfrentarse al mismo jugador instantáneamente
   inBattle: false
 };
 
@@ -312,7 +313,6 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
   STATE.user.playerClass = playerClass;
-  // Añadimos un identificador único por pestaña al email para que nicks repetidos no colisionen
   const uniqueTabId = Math.random().toString(36).substring(2, 8);
   STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${uniqueTabId}@game.com`;
   STATE.roomCode = roomCodeInput;
@@ -721,7 +721,6 @@ function listenRoomChanges() {
 }
 
 function setupRealtimePresence() {
-  // Usamos el email único de la sesión como clave de presencia en el canal
   roomChannel = supabase.channel('room_' + STATE.roomCode, {
     config: { presence: { key: STATE.user.email } }
   });
@@ -750,7 +749,6 @@ function updatePlayerMarkers(presenceState) {
   let totalPlayers = 0;
   const activeKeys = Object.keys(presenceState);
 
-  // 1. Eliminar marcadores de jugadores desconectados
   Object.keys(playerMarkers).forEach(emailKey => {
     if (!activeKeys.includes(emailKey)) {
       if (playerMarkers[emailKey]) {
@@ -760,17 +758,13 @@ function updatePlayerMarkers(presenceState) {
     }
   });
 
-  // 2. Crear o actualizar marcadores de los jugadores conectados contando cada clave única de presencia
   activeKeys.forEach(emailKey => {
     const playerDatas = presenceState[emailKey];
     if (!playerDatas || playerDatas.length === 0) return;
 
-    // Cada clave única en presenceState representa un cliente conectado
     totalPlayers++;
-
     const data = playerDatas[playerDatas.length - 1];
 
-    // Evitar renderizar nuestro propio marcador como externo
     if (emailKey === STATE.user.email) return;
 
     const color = data.team === 'red' ? '#e63946' : '#1d3557';
@@ -802,14 +796,15 @@ function updatePlayerMarkers(presenceState) {
   const onlineEl = document.getElementById("onlineCount");
   if (onlineEl) onlineEl.innerText = totalPlayers;
 
-  // 3. Comprobar si hay enemigos cercanos para iniciar combate
   checkCombatWithNearbyPlayers(presenceState);
 }
 
 function checkCombatWithNearbyPlayers(presenceState) {
   if (STATE.inBattle) return;
   const now = Date.now();
-  if (now - STATE.lastBattleTime < 20000) return; // Cooldown de 20s
+  
+  // Cooldown ampliado a 35 segundos para evitar cadenas de combate
+  if (now - STATE.lastBattleTime < 35000) return;
 
   const activeKeys = Object.keys(presenceState);
   
@@ -819,6 +814,10 @@ function checkCombatWithNearbyPlayers(presenceState) {
     const playerDatas = presenceState[emailKey];
     if (!playerDatas || playerDatas.length === 0) return;
     const enemy = playerDatas[playerDatas.length - 1];
+    const enemyEmail = enemy.email || emailKey;
+
+    // Evita pelear consecutivamente con la misma persona
+    if (STATE.lastEnemyBattled === enemyEmail && now - STATE.lastBattleTime < 60000) return;
 
     if (enemy.team && enemy.team !== STATE.team) {
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
@@ -826,6 +825,7 @@ function checkCombatWithNearbyPlayers(presenceState) {
       if (distance <= 15 && !STATE.inBattle) {
         STATE.inBattle = true;
         STATE.lastBattleTime = now;
+        STATE.lastEnemyBattled = enemyEmail;
         triggerPlayerBattle(enemy);
       }
     }
@@ -856,7 +856,10 @@ async function triggerPlayerBattle(enemy) {
     } else {
       await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
     }
-    STATE.inBattle = false;
+    // Mantenemos un pequeño respiro antes de permitir otro combate
+    setTimeout(() => {
+      STATE.inBattle = false;
+    }, 2000);
   });
 }
 
@@ -872,6 +875,7 @@ async function penalizePlayerCard(reasonText) {
     return;
   }
 
+  // Seleccionamos solo una carta al azar para penalizar de forma controlada
   const cardToLose = myCards[Math.floor(Math.random() * myCards.length)];
 
   const { error: deleteErr } = await supabase
