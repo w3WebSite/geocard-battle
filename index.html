@@ -871,10 +871,12 @@ function checkCombatWithNearbyPlayers(uniqueUsersMap) {
   });
 }
 
-async function triggerPlayerBattle(enemy) {
+async function triggerPlayerBattle(enemyData) {
+  const currentEnemy = enemyData; // Guardamos la referencia de forma segura
+  
   swal({
     title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
-    text: `¡Te has cruzado con ${enemy.nick} (${enemy.team ? enemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
+    text: `¡Te has cruzado con ${currentEnemy.nick} (${currentEnemy.team ? currentEnemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
     type: "warning",
     showCancelButton: true,
     confirmButtonText: "¡Atacar! 💥",
@@ -882,15 +884,14 @@ async function triggerPlayerBattle(enemy) {
     closeOnConfirm: true,
     closeOnCancel: true
   }, function(isConfirm) {
-    // Manejamos la lógica de forma síncrona/interna para evitar el conflicto con SweetAlert
     if (isConfirm) {
       const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
-      const enemyPower = (enemy.level || 1) * 10 + Math.random() * 50;
+      const enemyPower = (currentEnemy.level || 1) * 10 + Math.random() * 50;
 
       if (playerPower >= enemyPower) {
-        swal("¡Victoria Gloriosa! 🏆", `Has derrotado a ${enemy.nick} en este sector. ¡Honor para el equipo!`, "success");
+        swal("¡Victoria Gloriosa! 🏆", `Has derrotado a ${currentEnemy.nick} en este sector. ¡Honor para el equipo!`, "success");
       } else {
-        swal("¡Derrota! 💀", `El rival ${enemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
+        swal("¡Derrota! 💀", `El rival ${currentEnemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
         penalizePlayerCard("Has caído derrotado en combate.");
       }
     } else {
@@ -901,6 +902,7 @@ async function triggerPlayerBattle(enemy) {
     }, 2000);
   });
 }
+
   swal({
     title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
     text: `¡Te has cruzado con ${enemy.nick} (${enemy.team ? enemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
