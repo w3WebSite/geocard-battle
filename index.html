@@ -184,7 +184,8 @@ const STATE = {
   cardsCaptured: 0,
   playerLevel: 1,
   selectedPerk: null,
-  lastBattleTime: 0 // Cooldown para evitar avisos de combate repetitivos seguidos
+  lastBattleTime: 0,
+  inBattle: false // Bandera para evitar múltiples activaciones simultáneas
 };
 
 const CARD_POOL = [
@@ -794,15 +795,15 @@ function updatePlayerMarkers(presenceState) {
   const onlineEl = document.getElementById("onlineCount");
   if (onlineEl) onlineEl.innerText = totalPlayers;
 
-  // 3. Comprobar si hay enemigos cercanos para iniciar combate por proximidad
+  // 3. Comprobar si hay enemigos cercanos para iniciar combate (separado del bucle principal de renderizado)
   checkCombatWithNearbyPlayers(presenceState);
 }
 
-// NUEVA FUNCIÓN: Comprueba la distancia con jugadores de equipos contrarios
 function checkCombatWithNearbyPlayers(presenceState) {
+  // Si ya estamos procesando una batalla o estamos en cooldown, salimos para no bloquear los eventos de red
+  if (STATE.inBattle) return;
   const now = Date.now();
-  // Cooldown de 15 segundos para evitar que la alerta salte continuamente cada segundo
-  if (now - STATE.lastBattleTime < 15000) return;
+  if (now - STATE.lastBattleTime < 20000) return; // Cooldown ampliado a 20s para evitar bucles de combate seguidos
 
   const activeKeys = Object.keys(presenceState);
   
@@ -813,12 +814,11 @@ function checkCombatWithNearbyPlayers(presenceState) {
     if (!playerDatas || playerDatas.length === 0) return;
     const enemy = playerDatas[playerDatas.length - 1];
 
-    // Solo salta si el otro jugador es de un equipo diferente
     if (enemy.team && enemy.team !== STATE.team) {
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
       
-      // Si el enemigo está a 15 metros o menos
-      if (distance <= 15) {
+      if (distance <= 15 && !STATE.inBattle) {
+        STATE.inBattle = true;
         STATE.lastBattleTime = now;
         triggerPlayerBattle(enemy);
       }
@@ -826,7 +826,6 @@ function checkCombatWithNearbyPlayers(presenceState) {
   });
 }
 
-// NUEVA FUNCIÓN: Ventana de alerta y resolución del combate/rendición
 async function triggerPlayerBattle(enemy) {
   swal({
     title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
@@ -843,6 +842,8 @@ async function triggerPlayerBattle(enemy) {
         value: "attack",
       },
     },
+    closeOnClickOutside: false,
+    closeOnEsc: false
   }).then(async (value) => {
     if (value === "surrender") {
       await penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
@@ -857,10 +858,11 @@ async function triggerPlayerBattle(enemy) {
         await penalizePlayerCard("Has caído derrotado en combate.");
       }
     }
+    // Liberamos la bandera de batalla para que el radar y la presencia sigan funcionando con normalidad
+    STATE.inBattle = false;
   });
 }
 
-// NUEVA FUNCIÓN: Penalización de perder una carta del inventario en Supabase
 async function penalizePlayerCard(reasonText) {
   const { data: myCards, error } = await supabase
     .from('player_cards')
@@ -873,7 +875,6 @@ async function penalizePlayerCard(reasonText) {
     return;
   }
 
-  // Seleccionar aleatoriamente una carta para retirar
   const cardToLose = myCards[Math.floor(Math.random() * myCards.length)];
 
   const { error: deleteErr } = await supabase
@@ -883,7 +884,7 @@ async function penalizePlayerCard(reasonText) {
 
   if (!deleteErr) {
     STATE.cardsCaptured = Math.max(0, STATE.cardsCaptured - 1);
-    checkPlayerLevelProgression(); // Actualiza barra de XP y nivel si procede
+    checkPlayerLevelProgression();
     swal("¡Carta Perdida! 📉", `${reasonText}\nHas perdido la carta: "${cardToLose.card_name}".`, "error");
   }
 }
