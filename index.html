@@ -89,7 +89,6 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);
 }
 
-/* Opcional: un toque de sombra interna en el mapa para darle profundidad */
 #map {
   height: 500px;
   width: 100%;
@@ -278,6 +277,7 @@ window.showHowToPlay = function(){
         <p><b>1. 🎴 Persistencia:</b> Si sales y entras con el mismo Nick, recuperas tu inventario y tu nivel exacto.</p>
         <p><b>2. ⭐ Sistema de XP y Niveles Infinitos:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
         <p><b>3. 💬 Chat y Comunidad:</b> Usa el chat en vivo integrado o conéctate al servidor de Discord oficial.</p>
+        <p><b>4. ⏱️ Auto-destrucción:</b> Los mensajes del chat desaparecen automáticamente transcurrido 1 minuto.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -458,9 +458,19 @@ function appendChatMessage(m) {
   
   const div = document.createElement("div");
   div.style.marginBottom = "4px";
+  div.style.transition = "opacity 0.5s ease";
   div.innerHTML = `<b style="color:${teamColor};">${m.nick}:</b> ${escapeHtml(m.message)}`;
+  
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+
+  // ⏱️ Auto-borrado transcurrido 1 minuto (60000 ms)
+  setTimeout(() => {
+    if (div && div.parentNode) {
+      div.style.opacity = "0";
+      setTimeout(() => div.remove(), 500);
+    }
+  }, 60000);
 }
 
 function escapeHtml(text) {
@@ -505,7 +515,7 @@ function updateUserPositionOnMap(){
     const colorsList = ['#e9c46a', '#38bdf8', '#a855f7', '#ec4899', '#22c55e', '#f97316'];
     const badgeColor = colorsList[(STATE.playerLevel - 2) % colorsList.length];
     
-    glowStyle = `box-shadow: 0 0 ${14 + STATE.playerLevel * 2}px ${badgeColor}, 0 0 25px ${color}; border: 3px solid ${badgeColor};`;
+    glowStyle = `box-shadow: 0 0 ${14 + STATE.playerLevel}px ${badgeColor}, 0 0 25px ${color}; border: 3px solid ${badgeColor};`;
     badgeHTML = `<div style="position:absolute; top:-12px; right:-12px; background:${badgeColor}; color:#073b4c; font-size:10px; font-weight:bold; padding:1px 4px; border-radius:6px; border:1px solid white;">⭐L${STATE.playerLevel}</div>`;
   }
 
@@ -798,95 +808,91 @@ async function showAdminConfigScreen(){
         <input id="adminRoomCode" value="EUROPA1" style="width:90%"><br>
         <label style="font-size:11px; font-weight:bold;">Ciudad / Región:</label><br>
         <select id="adminCitySelect" style="width:90%;">
-          <option value="deltebre">Deltebre (Delta del Ebro) 🇪🇸</option>
-          <option value="barcelona">Barcelona 🇪🇸</option>
-          <option value="madrid">Madrid 🇪🇸</option>
-          <option value="paris">París 🇫🇷</option>
-          <option value="roma">Roma 🇮🇹</option>
-          <option value="berlin">Berlín 🇩🇪</option>
+          <option value="deltebre">Deltebre (Delta del Ebro)</option>
+          <option value="barcelona">Barcelona</option>
+          <option value="madrid">Madrid</option>
+          <option value="paris">París</option>
+          <option value="roma">Roma</option>
+          <option value="berlin">Berlín</option>
         </select><br>
-        <label style="font-size:11px; font-weight:bold;">Tiempo (minutos):</label><br>
-        <input type="number" id="adminDuration" value="30" style="width:90%"><br>
-        <label style="font-size:11px; font-weight:bold;">Cartas en mapa:</label><br>
-        <input type="number" id="adminMaxCards" value="12" style="width:90%"><br><br>
-        <button onclick="window.startAdminGame()" style="width:100%; margin:0;">Crear y Lanzar 🚀</button>
+        <label style="font-size:11px; font-weight:bold;">Duración (minutos):</label><br>
+        <input id="adminDuration" type="number" value="30" style="width:90%"><br><br>
+        <button onclick="window.createNewRoom()" style="width:92%;">Crear Sala y Generar Cartas 🗺️</button>
       </div>
-      <div style="text-align:left;">
-        <h4 style="margin:0 0 8px 0; color:#38bdf8;">📋 Salas Existentes:</h4>
-        <div id="roomListContainer">${roomListHTML}</div>
-      </div>
+      <h4 style="margin:10px 0 5px 0; text-align:left; color:#cbd5e1;">📋 Salas Existentes:</h4>
+      <div style="max-height:160px; overflow-y:auto; text-align:left; padding-right:5px;">${roomListHTML}</div><br>
+      <button onclick="window.location.reload()">Cerrar / Volver 🚪</button>
     </div>
   `;
   document.body.appendChild(modalDiv);
 }
 
-window.adminEnterRoom = function(code, duration, cityKey){
-  if(CITIES[cityKey]) {
-    STATE.userLat = CITIES[cityKey].lat;
-    STATE.userLng = CITIES[cityKey].lng;
-  }
-  STATE.roomCode = code;
-  STATE.team = "red";
-  document.getElementById("adminModal").remove();
-  launchGameEngine(duration || 30);
-};
-
-window.deleteRoom = async function(codeToDelete){
-  swal({
-    title: "¿Borrar sala " + codeToDelete + "?",
-    text: "Esto borrará la sala, las cartas y los mensajes de chat.",
-    icon: "warning",
-    buttons: ["Cancelar", "Sí, borrar"],
-    dangerMode: true,
-  }).then(async (willDelete) => {
-    if (willDelete) {
-      await supabase.from('geocaches').delete().eq('room_code', codeToDelete);
-      await supabase.from('player_cards').delete().eq('room_code', codeToDelete);
-      await supabase.from('geocard_mensajes').delete().eq('room_code', codeToDelete);
-      await supabase.from('rooms').delete().eq('code', codeToDelete);
-      swal("Sala borrada", "Wipe completo (cartas y mensajes eliminados con éxito).", "success");
-      document.getElementById("adminModal").remove();
-      showAdminConfigScreen();
-    }
-  });
-};
-
-window.startAdminGame = async function(){
+window.createNewRoom = async function(){
   const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
-  const cityKey = document.getElementById("adminCitySelect").value;
+  const city = document.getElementById("adminCitySelect").value;
   const duration = parseInt(document.getElementById("adminDuration").value) || 30;
-  const maxCards = parseInt(document.getElementById("adminMaxCards").value) || 12;
 
-  if(!code) return;
+  if(!code){ swal("Error", "Ingresa un código de sala válido", "warning"); return; }
 
-  const cityData = CITIES[cityKey];
-  STATE.userLat = cityData.lat;
-  STATE.userLng = cityData.lng;
-  STATE.roomCode = code;
-  STATE.team = "red";
+  await supabase.from('rooms').delete().eq('code', code);
+  await supabase.from('geocaches').delete().eq('room_code', code);
 
-  await supabase.from('rooms').upsert({
-    code: STATE.roomCode, active: true, city: cityKey, duration: duration, red_score: 0, blue_score: 0
-  }, { onConflict: 'code' });
+  const { error: roomErr } = await supabase.from('rooms').insert({
+    code: code, city: city, duration: duration, red_score: 0, blue_score: 0, active: true
+  });
 
-  await supabase.from('geocaches').delete().eq('room_code', STATE.roomCode);
-  await supabase.from('geocard_mensajes').delete().eq('room_code', STATE.roomCode);
+  if(roomErr){ swal("Error", "No se pudo crear la sala", "error"); return; }
 
-  const newGeocaches = [];
-  for(let i = 0; i < maxCards; i++){
-    const template = CARD_POOL[i % CARD_POOL.length];
-    newGeocaches.push({
-      room_code: STATE.roomCode,
-      lat: STATE.userLat + (Math.random() - 0.5) * 0.03,
-      lng: STATE.userLng + (Math.random() - 0.5) * 0.03,
-      card_name: template.name, card_type: template.type,
-      attack: template.attack, defense: template.defense, claimed: false
+  const baseLat = CITIES[city].lat;
+  const baseLng = CITIES[city].lng;
+  const geocachesToInsert = [];
+
+  for(let i = 0; i < 15; i++){
+    const randomCard = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+    const latOffset = (Math.random() - 0.5) * 0.035;
+    const lngOffset = (Math.random() - 0.5) * 0.035;
+
+    geocachesToInsert.push({
+      room_code: code,
+      card_name: randomCard.name,
+      attack: randomCard.attack,
+      defense: randomCard.defense,
+      lat: baseLat + latOffset,
+      lng: baseLng + lngOffset,
+      claimed: false,
+      team: null
     });
   }
 
-  await supabase.from('geocaches').insert(newGeocaches);
+  await supabase.from('geocaches').insert(geocachesToInsert);
+  swal("¡Sala Creada!", `La sala "${code}" y sus 15 cartas tácticas han sido desplegadas con éxito.`, "success");
+  document.getElementById("adminModal").remove();
+  showAdminConfigScreen();
+};
+
+window.adminEnterRoom = function(code, duration, city){
+  STATE.isAdmin = false;
+  STATE.user.nick = "Administrador";
+  STATE.user.playerClass = "⚔️ Guerrero";
+  STATE.user.email = "admin_jugador@game.com";
+  STATE.roomCode = code;
+  STATE.team = "red";
+
+  if(CITIES[city]){
+    STATE.userLat = CITIES[city].lat;
+    STATE.userLng = CITIES[city].lng;
+  }
+
   document.getElementById("adminModal").remove();
   launchGameEngine(duration);
+};
+
+window.deleteRoom = async function(code){
+  await supabase.from('rooms').delete().eq('code', code);
+  await supabase.from('geocaches').delete().eq('room_code', code);
+  swal("Eliminada", `La sala ${code} ha sido borrada.`, "success");
+  document.getElementById("adminModal").remove();
+  showAdminConfigScreen();
 };
 </script>
 </body>
