@@ -169,7 +169,6 @@ const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON
 const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Identificador único por pestaña para garantizar que múltiples pestañas del mismo navegador se contabilicen por separado
 const SESSION_ID = Math.random().toString(36).substring(2, 9);
 
 const STATE = {
@@ -583,7 +582,6 @@ function updateUserPositionOnMap(){
     }).addTo(STATE.map);
   }
 
-  // Enviar estado de presencia al canal si el usuario se mueve más de 1 metro
   const movedDist = getDistanceInMeters(lastTrackedLat, lastTrackedLng, STATE.userLat, STATE.userLng);
   if(roomChannel && (lastTrackedLat === 0 || movedDist > 1)) {
     lastTrackedLat = STATE.userLat;
@@ -731,13 +729,29 @@ function listenRoomChanges() {
 }
 
 function setupRealtimePresence() {
-  // Canal de presencia único por sala usando el SESSION_ID y el email
-  roomChannel = supabase.channel('room_presence_' + STATE.roomCode, {
-    config: { presence: { key: STATE.user.email } }
+  if (roomChannel) {
+    supabase.removeChannel(roomChannel);
+  }
+
+  // Canal único por sala configurado con la clave de presencia del email
+  roomChannel = supabase.channel('presence_room_' + STATE.roomCode, {
+    config: {
+      presence: {
+        key: STATE.user.email
+      }
+    }
   });
 
   roomChannel
     .on('presence', { event: 'sync' }, () => {
+      const state = roomChannel.presenceState();
+      updatePlayerMarkers(state);
+    })
+    .on('presence', { event: 'join' }, () => {
+      const state = roomChannel.presenceState();
+      updatePlayerMarkers(state);
+    })
+    .on('presence', { event: 'leave' }, () => {
       const state = roomChannel.presenceState();
       updatePlayerMarkers(state);
     })
@@ -757,16 +771,16 @@ function setupRealtimePresence() {
 }
 
 function updatePlayerMarkers(presenceState) {
-  const activeKeys = Object.keys(presenceState);
   let uniqueUsersMap = {};
 
-  // Recopilar la información más reciente de cada usuario único conectado
-  activeKeys.forEach(emailKey => {
-    const playerDatas = presenceState[emailKey];
-    if (!playerDatas || playerDatas.length === 0) return;
-    const data = playerDatas[playerDatas.length - 1];
-    if (data && data.email) {
-      uniqueUsersMap[data.email] = data;
+  // Supabase v2 devuelve un objeto donde cada clave tiene un array de presencias
+  Object.keys(presenceState).forEach(key => {
+    const userPresences = presenceState[key];
+    if (Array.isArray(userPresences) && userPresences.length > 0) {
+      const latestData = userPresences[userPresences.length - 1];
+      if (latestData && latestData.email) {
+        uniqueUsersMap[latestData.email] = latestData;
+      }
     }
   });
 
@@ -774,9 +788,11 @@ function updatePlayerMarkers(presenceState) {
   const totalPlayers = uniqueEmails.length;
 
   const onlineEl = document.getElementById("onlineCount");
-  if (onlineEl) onlineEl.innerText = totalPlayers > 0 ? totalPlayers : 1;
+  if (onlineEl) {
+    onlineEl.innerText = totalPlayers > 0 ? totalPlayers : 1;
+  }
 
-  // 1. Eliminar marcadores de jugadores desconectados
+  // 1. Eliminar marcadores de jugadores que ya no están conectados
   Object.keys(playerMarkers).forEach(emailKey => {
     if (!uniqueUsersMap[emailKey]) {
       if (playerMarkers[emailKey]) {
@@ -786,12 +802,11 @@ function updatePlayerMarkers(presenceState) {
     }
   });
 
-  // 2. Crear o actualizar marcadores de los demás jugadores en el mapa
+  // 2. Crear o actualizar los marcadores de los demás jugadores en el mapa
   uniqueEmails.forEach(emailKey => {
-    const data = uniqueUsersMap[emailKey];
-
     if (emailKey === STATE.user.email) return;
 
+    const data = uniqueUsersMap[emailKey];
     const color = data.team === 'red' ? '#e63946' : '#1d3557';
     let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
     let enemyBadge = "";
