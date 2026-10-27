@@ -280,6 +280,50 @@ window.showHowToPlay = function(){
   document.body.appendChild(helpModal);
 };
 
+// Panel y función de Administrador
+function showAdminConfigScreen() {
+  const adminModal = document.createElement("div");
+  adminModal.className = "modal";
+  adminModal.id = "adminModal";
+  adminModal.innerHTML = `
+    <div>
+      <h2>⚙️ Panel de Administración</h2>
+      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Bienvenido, Administrador. Aquí puedes gestionar las salas del juego.</p>
+      
+      <input id="adminRoomCodeInput" placeholder="Código de Sala a Crear/Gestionar"><br>
+      <input id="adminDurationInput" type="number" placeholder="Duración en minutos (Ej: 30)" value="30"><br><br>
+      
+      <button onclick="window.createOrUpdateRoom()" style="background:linear-gradient(45deg,#2a9d8f,#e9c46a); color:#073b4c;">Crear / Activar Sala 🚀</button><br>
+      <button onclick="location.reload()" style="background:linear-gradient(45deg,#e63946,#d62828);">Cerrar Sesión ✖️</button>
+    </div>
+  `;
+  document.body.appendChild(adminModal);
+}
+
+window.createOrUpdateRoom = async function() {
+  const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();
+  const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
+
+  if(!code) {
+    swal("Error", "Introduce un código de sala válido", "warning");
+    return;
+  }
+
+  const { error } = await supabase.from('rooms').upsert({
+    code: code,
+    active: true,
+    duration: duration,
+    red_score: 0,
+    blue_score: 0
+  }, { onConflict: 'code' });
+
+  if(error) {
+    swal("Error", "No se pudo crear la sala en la base de datos", "error");
+  } else {
+    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido configurada correctamente.`, "success");
+  }
+};
+
 window.processPlayerLogin = async function(){
   const nickInput = document.getElementById("loginNick").value.trim();
   const playerClass = document.getElementById("playerClassSelect").value;
@@ -597,9 +641,7 @@ function updateUserPositionOnMap(){
   }
 }
 
-// ==========================================
-// FUNCIÓN CORREGIDA: CARGA OPTIMIZADA Y LIMPIEZA DE DOM
-// ==========================================
+// Carga optimizada de cartas y limpieza de memoria
 async function loadGeocachesFromSupabase(){
   const { data, error } = await supabase
     .from('geocaches')
@@ -613,7 +655,7 @@ async function loadGeocachesFromSupabase(){
 
   data.forEach(cache => {
     const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-    const MAX_VIEW_DISTANCE = 1500; // Solo mostrar cartas a menos de 1.5 km para evitar sobrecarga
+    const MAX_VIEW_DISTANCE = 1500;
 
     if (distance <= MAX_VIEW_DISTANCE) {
       visibleCacheIds.add(cache.id);
@@ -675,7 +717,6 @@ async function loadGeocachesFromSupabase(){
     }
   });
 
-  // Limpiar del mapa las cartas lejanas para liberar memoria en el móvil
   Object.keys(mapMarkersList).forEach(id => {
     if (!visibleCacheIds.has(id)) {
       STATE.map.removeLayer(mapMarkersList[id]);
@@ -772,10 +813,12 @@ function setupRealtimePresence() {
     .on('presence', { event: 'sync' }, () => {
       const state = roomChannel.presenceState();
       updatePlayerMarkers(state);
+      checkNearbyEnemies(state);
     })
     .on('presence', { event: 'join' }, () => {
       const state = roomChannel.presenceState();
       updatePlayerMarkers(state);
+      checkNearbyEnemies(state);
     })
     .on('presence', { event: 'leave' }, () => {
       const state = roomChannel.presenceState();
@@ -858,6 +901,97 @@ function updatePlayerMarkers(presenceState) {
   });
 }
 
+// ==========================================
+// SISTEMA DE COMBATE POR PROXIMIDAD (< 15 metros)
+// ==========================================
+function checkNearbyEnemies(presenceState) {
+  if (STATE.inBattle) return;
+
+  let uniqueUsersMap = {};
+  Object.keys(presenceState).forEach(key => {
+    const userPresences = presenceState[key];
+    if (Array.isArray(userPresences) && userPresences.length > 0) {
+      const latestData = userPresences[userPresences.length - 1];
+      if (latestData && latestData.session && latestData.session !== SESSION_ID) {
+        uniqueUsersMap[latestData.session] = latestData;
+      }
+    }
+  });
+
+  Object.values(uniqueUsersMap).forEach(enemy => {
+    if (enemy.team && enemy.team !== STATE.team) {
+      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
+      
+      if (distance <= 15) {
+        const now = Date.now();
+        if (STATE.lastEnemyBattled === enemy.email && (now - STATE.lastBattleTime < 30000)) {
+          return; 
+        }
+
+        STATE.lastBattleTime = now;
+        STATE.lastEnemyBattled = enemy.email;
+        
+        triggerCombatModal(enemy);
+      }
+    }
+  });
+}
+
+async function triggerCombatModal(enemy) {
+  STATE.inBattle = true;
+
+  const { data: myCards } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  if (!myCards || myCards.length === 0) {
+    swal("¡Zona de Combate! ⚔️", `Te has encontrado con ${enemy.nick}, ¡pero no tienes cartas en tu inventario para luchar! Ve a capturar cartas al mapa primero.`, "warning");
+    STATE.inBattle = false;
+    return;
+  }
+
+  const randomCard = myCards[Math.floor(Math.random() * myCards.length)];
+  const enemyPower = (enemy.level || 1) * 40 + Math.floor(Math.random() * 50);
+  const myPower = randomCard.attack + randomCard.defense;
+
+  const combatModal = document.createElement("div");
+  combatModal.className = "modal";
+  combatModal.id = "combatModal";
+  combatModal.innerHTML = `
+    <div>
+      <h2>⚔️ ¡COMBATE DE TERRITORIO! ⚔️</h2>
+      <p style="font-size:13px; color:#cbd5e1;">Te enfrentas cuerpo a cuerpo contra <b>${enemy.nick}</b></p>
+      <div style="background:rgba(255,255,255,0.06); padding:12px; border-radius:10px; margin:10px 0; text-align:left;">
+        <p style="margin:4px 0;"><b>Tu carta:</b> ${randomCard.card_name} (Poder: ${myPower})</p>
+        <p style="margin:4px 0;"><b>Poder del rival:</b> ${enemyPower}</p>
+      </div>
+      <p id="combatResultText" style="font-size:14px; font-weight:bold; color:#38bdf8; margin:15px 0;"></p>
+      <button id="resolveCombatBtn" style="background:linear-gradient(45deg,#e63946,#d62828);">¡Atacar con todo! 💥</button>
+    </div>
+  `;
+  document.body.appendChild(combatModal);
+
+  document.getElementById("resolveCombatBtn").onclick = async () => {
+    const won = myPower >= enemyPower;
+    const resultText = document.getElementById("combatResultText");
+    
+    if (won) {
+      resultText.innerHTML = "🎉 ¡VICTORIA! Has derrotado al rival y defendido tu posición.";
+      swal("¡Victoria en Combate! 🏆", "Has ganado el enfrentamiento.", "success");
+    } else {
+      resultText.innerHTML = "💀 DERROTA... El rival era más fuerte esta vez.";
+      swal("Derrota 💧", "Has perdido el duelo por proximidad.", "error");
+    }
+
+    setTimeout(() => {
+      document.getElementById("combatModal").remove();
+      STATE.inBattle = false;
+    }, 2500);
+  };
+}
+
 function startTimer(durationSeconds) {
   let timer = durationSeconds;
   const display = document.getElementById("timer");
@@ -895,50 +1029,6 @@ document.getElementById("btnExit").addEventListener("click", () => {
     }
   });
 });
-
-function showAdminConfigScreen() {
-  const adminModal = document.createElement("div");
-  adminModal.className = "modal";
-  adminModal.id = "adminModal";
-  adminModal.innerHTML = `
-    <div>
-      <h2>⚙️ Panel de Administración</h2>
-      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Bienvenido, Administrador. Aquí puedes gestionar las salas del juego.</p>
-      
-      <input id="adminRoomCodeInput" placeholder="Código de Sala a Crear/Gestionar"><br>
-      <input id="adminDurationInput" type="number" placeholder="Duración en minutos (Ej: 30)" value="30"><br><br>
-      
-      <button onclick="window.createOrUpdateRoom()" style="background:linear-gradient(45deg,#2a9d8f,#e9c46a); color:#073b4c;">Crear / Activar Sala 🚀</button><br>
-      <button onclick="location.reload()" style="background:linear-gradient(45deg,#e63946,#d62828);">Cerrar Sesión ✖️</button>
-    </div>
-  `;
-  document.body.appendChild(adminModal);
-}
-
-window.createOrUpdateRoom = async function() {
-  const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();
-  const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
-
-  if(!code) {
-    swal("Error", "Introduce un código de sala válido", "warning");
-    return;
-  }
-
-  // Insertar o actualizar la sala en Supabase
-  const { error } = await supabase.from('rooms').upsert({
-    code: code,
-    active: true,
-    duration: duration,
-    red_score: 0,
-    blue_score: 0
-  }, { onConflict: 'code' });
-
-  if(error) {
-    swal("Error", "No se pudo crear la sala en la base de datos", "error");
-  } else {
-    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido configurada correctamente.`, "success");
-  }
-};
 </script>
 </body>
 </html>
