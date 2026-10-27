@@ -111,6 +111,15 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
 
+.battle-card-option {
+  background: rgba(255,255,255,0.08); border: 2px solid #2a9d8f;
+  border-radius: 12px; padding: 10px; margin: 8px 0; cursor: pointer;
+  transition: 0.2s; text-align: left;
+}
+.battle-card-option:hover {
+  background: rgba(42, 157, 143, 0.3); transform: scale(1.02);
+}
+
 @keyframes floatCard {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
@@ -184,6 +193,13 @@ const STATE = {
   inBattle: false
 };
 
+const DEFAULT_STARTER_CARD = {
+  card_name: "🥊 Puño Limpio (Carta Recluta)",
+  attack: 20,
+  defense: 20,
+  type: "Básica"
+};
+
 const CARD_POOL = [
   { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },
   { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },
@@ -241,8 +257,8 @@ function showLoginScreen(){
       <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick y Sala:</b></p>
       <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)"><br>
       <select id="playerClassSelect">
-        <option value="⚔️ Guerrero">⚔️ Guerrero (Ataque)</option>
-        <option value="🛡️ Guardián">🛡️ Guardián (Defensa)</option>
+        <option value="⚔️ Guerrero">⚔️ Guerrero (+15 ATK)</option>
+        <option value="🛡️ Guardián">🛡️ Guardián (+15 DEF)</option>
         <option value="⚡ Explorador">⚡ Explorador (Agilidad)</option>
         <option value="🔮 Mago Táctico">🔮 Mago Táctico (Especial)</option>
       </select><br>
@@ -270,9 +286,9 @@ window.showHowToPlay = function(){
       <h2>📜 Guía Global de Supervivencia</h2>
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">
         <p><b>1. 🌍 Sin Fronteras:</b> Juega desde cualquier lugar del mundo usando tu ubicación GPS real.</p>
-        <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
+        <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y ejecutas habilidades mejoradas.</p>
         <p><b>3. 🚶 Movimiento Dinámico:</b> Las cartas aparecen automáticamente a tu alrededor a medida que te desplazas.</p>
-        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros para retarles a duelo (pueden aceptar o rechazar).</p>
+        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros. Elige tu mejor carta para luchar o huye a salvo.</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -437,7 +453,6 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
   STATE.user.playerClass = playerClass;
-  // CORREO PERSISTENTE: Se vincula al nick y sala para recuperar cartas al volver a entrar
   STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${roomCodeInput}@game.com`;
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
@@ -528,7 +543,7 @@ function launchGameEngine(durationMinutes){
 }
 
 // ==========================================
-// SISTEMA DE PRESENCIA Y PROXIMIDAD PVP CON CONSENTIMIENTO
+// SISTEMA DE COMBATE EN TIEMPO REAL (PVP)
 // ==========================================
 function setupRealtimePresence(){
   roomChannel = supabase.channel('room_' + STATE.roomCode, {
@@ -570,7 +585,6 @@ function checkNearbyPlayersForBattle(presenceState) {
   if (STATE.inBattle) return;
 
   const now = Date.now();
-  // Evitar que salten avisos continuos si se rechazó recientemente (cooldown de 45 segundos)
   if (now - STATE.lastBattleTime < 45000) return;
 
   Object.keys(presenceState).forEach(clientId => {
@@ -579,7 +593,6 @@ function checkNearbyPlayersForBattle(presenceState) {
       if (p.email !== STATE.user.email && p.team !== STATE.team) {
         const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);
         
-        // Si el enemigo está a menos de 15 metros
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {
           STATE.lastBattleTime = now;
           STATE.lastEnemyBattled = p.email;
@@ -591,7 +604,6 @@ function checkNearbyPlayersForBattle(presenceState) {
 }
 
 function promptBattleConsent(enemy) {
-  // Protección opcional: si el jugador no tiene cartas, se le avisa o se le da opción de huida automática
   swal({
     title: "⚔️ ¡Duelo Cercano Detectado!",
     text: `Te has cruzado con el rival ${enemy.nick} a menos de 15 metros.\n¿Deseas aceptar el combate PvP o rechazar y huir?`,
@@ -605,19 +617,87 @@ function promptBattleConsent(enemy) {
     },
   }).then((value) => {
     if (value === "accept") {
-      triggerPvPBattle(enemy);
+      openBattleCardSelectionModal(enemy);
     } else {
       swal("Has huido con éxito 💨", "Te has retirado de la zona de combate de forma segura.", "info");
     }
   });
 }
 
-function triggerPvPBattle(enemy) {
+// 🎴 Seleccionar carta para el combate (o usar carta por defecto)
+async function openBattleCardSelectionModal(enemy) {
   STATE.inBattle = true;
-  swal("🔥 ¡BATALLA INICIADA! 🔥", `Estás combatiendo contra ${enemy.nick}.\n(Pantalla de combate en desarrollo)`, "success").then(() => {
-    STATE.inBattle = false;
+
+  const { data: myCards } = await supabase
+    .from('player_cards')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('user_email', STATE.user.email);
+
+  let cardsToSelect = myCards && myCards.length > 0 ? myCards : [DEFAULT_STARTER_CARD];
+
+  const battleModal = document.createElement("div");
+  battleModal.className = "modal";
+  battleModal.id = "battleModal";
+
+  let cardsHTML = "";
+  cardsToSelect.forEach((c, idx) => {
+    cardsHTML += `
+      <div class="battle-card-option" onclick="window.confirmCardChoice(${idx})">
+        <b>🎴 ${c.card_name}</b><br>
+        <span style="font-size:12px; color:#cbd5e1;">⚔️ ATK: ${c.attack} | 🛡️ DEF: ${c.defense}</span>
+      </div>
+    `;
   });
+
+  battleModal.innerHTML = `
+    <div>
+      <h2>⚔️ ¡PREPÁRATE PARA EL DUELO!</h2>
+      <p style="font-size:13px; color:#cbd5e1;">Combatiendo contra: <b>${enemy.nick}</b></p>
+      <p style="font-size:12px; color:#e9c46a;">Elige una carta de tu mazo para luchar:</p>
+      <div style="max-height:250px; overflow-y:auto;">${cardsHTML}</div>
+    </div>
+  `;
+
+  document.body.appendChild(battleModal);
+  window.currentBattleCards = cardsToSelect;
+  window.currentEnemy = enemy;
 }
+
+window.confirmCardChoice = async function(cardIdx) {
+  const chosenCard = window.currentBattleCards[cardIdx];
+  const enemy = window.currentEnemy;
+  const modal = document.getElementById("battleModal");
+  if (modal) modal.remove();
+
+  // Bonificación por clase
+  let attackBonus = STATE.user.playerClass.includes("Guerrero") ? 15 : 0;
+  let defenseBonus = STATE.user.playerClass.includes("Guardián") ? 15 : 0;
+
+  let myTotalPower = chosenCard.attack + chosenCard.defense + attackBonus + defenseBonus;
+  
+  // Simulación de respuesta enemiga (potencia aleatoria basada en nivel/cartas)
+  let enemyPower = Math.floor(Math.random() * 80) + 60; 
+
+  if (myTotalPower >= enemyPower) {
+    // 🏆 VICTORIA
+    STATE.cardsCaptured++;
+    checkPlayerLevelProgression();
+    
+    // Sumar 1 punto al contador del equipo en Supabase
+    const scoreField = STATE.team === 'red' ? 'red_score' : 'blue_score';
+    const currentScore = parseInt(document.getElementById(STATE.team + "Score").innerText) || 0;
+    
+    await supabase.from('rooms').update({ [scoreField]: currentScore + 1 }).eq('code', STATE.roomCode);
+
+    swal("🔥 ¡VICTORIA EN COMBATE! 🏆", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) ha superado a ${enemy.nick} (Poder: ${enemyPower}).\n\n+1 Punto para tu equipo y +1 de XP.`, "success");
+  } else {
+    // 💀 DERROTA
+    swal("💔 DERROTA EN COMBATE", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) fue superada por ${enemy.nick} (Poder: ${enemyPower}).\n\nTienes un escudo de protección de 45 segundos.`, "error");
+  }
+
+  STATE.inBattle = false;
+};
 
 async function loadChatMessages() {
   const { data } = await supabase
