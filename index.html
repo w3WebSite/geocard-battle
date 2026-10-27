@@ -59,7 +59,6 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* Estilos del Chat Flotante */
 #chatContainer{
   position: fixed; bottom: 15px; left: 15px; width: 300px; height: 210px;
   background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);
@@ -154,9 +153,7 @@ option { background: #0f172a; color: white; }
 <h2 id="timerContainer" style="display:none; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">⏱️: <span id="timer">00:00</span></h2>
 <div id="map"></div>
 
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Supabase SDK UMD -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script type="module">
@@ -738,7 +735,7 @@ function setupRealtimePresence() {
     roomChannel = null;
   }
 
-  const presenceKey = STATE.user.email + '_' + SESSION_ID;
+  const presenceKey = `${STATE.user.email}_${SESSION_ID}`;
 
   roomChannel = supabase.channel('presence_room_' + STATE.roomCode, {
     config: {
@@ -784,33 +781,33 @@ function updatePlayerMarkers(presenceState) {
     const userPresences = presenceState[key];
     if (Array.isArray(userPresences) && userPresences.length > 0) {
       const latestData = userPresences[userPresences.length - 1];
-      if (latestData && latestData.email) {
-        uniqueUsersMap[latestData.email] = latestData;
+      if (latestData && latestData.session) {
+        uniqueUsersMap[latestData.session] = latestData;
       }
     }
   });
 
-  const uniqueEmails = Object.keys(uniqueUsersMap);
-  const totalPlayers = uniqueEmails.length;
+  const uniqueSessions = Object.keys(uniqueUsersMap);
+  const totalPlayers = uniqueSessions.length;
 
   const onlineEl = document.getElementById("onlineCount");
   if (onlineEl) {
     onlineEl.innerText = totalPlayers > 0 ? totalPlayers : 1;
   }
 
-  Object.keys(playerMarkers).forEach(emailKey => {
-    if (!uniqueUsersMap[emailKey]) {
-      if (playerMarkers[emailKey]) {
-        STATE.map.removeLayer(playerMarkers[emailKey]);
-        delete playerMarkers[emailKey];
+  Object.keys(playerMarkers).forEach(sessionKey => {
+    if (!uniqueUsersMap[sessionKey]) {
+      if (playerMarkers[sessionKey]) {
+        STATE.map.removeLayer(playerMarkers[sessionKey]);
+        delete playerMarkers[sessionKey];
       }
     }
   });
 
-  uniqueEmails.forEach(emailKey => {
-    if (emailKey === STATE.user.email) return;
+  uniqueSessions.forEach(sessionKey => {
+    const data = uniqueUsersMap[sessionKey];
+    if (data.session === SESSION_ID) return;
 
-    const data = uniqueUsersMap[emailKey];
     const color = data.team === 'red' ? '#e63946' : '#1d3557';
     let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
     let enemyBadge = "";
@@ -827,13 +824,13 @@ function updatePlayerMarkers(presenceState) {
       iconAnchor: [9, 9]
     });
 
-    if (playerMarkers[emailKey]) {
-      playerMarkers[emailKey].setLatLng([data.lat, data.lng]);
-      playerMarkers[emailKey].setIcon(playerIcon);
+    if (playerMarkers[sessionKey]) {
+      playerMarkers[sessionKey].setLatLng([data.lat, data.lng]);
+      playerMarkers[sessionKey].setIcon(playerIcon);
     } else {
       const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
       marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team ? data.team.toUpperCase() : ''})<br>Nivel: ${data.level || 1}`);
-      playerMarkers[emailKey] = marker;
+      playerMarkers[sessionKey] = marker;
     }
   });
 
@@ -845,13 +842,9 @@ function checkCombatWithNearbyPlayers(uniqueUsersMap) {
   const now = Date.now();
   if (now - STATE.lastBattleTime < 35000) return;
 
-  Object.keys(uniqueUsersMap).forEach(emailKey => {
-    if (emailKey === STATE.user.email) return;
-
-    const enemy = uniqueUsersMap[emailKey];
-    const enemyEmail = enemy.email || emailKey;
-
-    if (STATE.lastEnemyBattled === enemyEmail && now - STATE.lastBattleTime < 60000) return;
+  Object.keys(uniqueUsersMap).forEach(sessionKey => {
+    const enemy = uniqueUsersMap[sessionKey];
+    if (enemy.session === SESSION_ID) return;
 
     if (enemy.team && enemy.team !== STATE.team) {
       const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
@@ -859,7 +852,7 @@ function checkCombatWithNearbyPlayers(uniqueUsersMap) {
       if (distance <= 15 && !STATE.inBattle) {
         STATE.inBattle = true;
         STATE.lastBattleTime = now;
-        STATE.lastEnemyBattled = enemyEmail;
+        STATE.lastEnemyBattled = enemy.session;
         triggerPlayerBattle(enemy);
       }
     }
