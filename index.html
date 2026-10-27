@@ -862,7 +862,6 @@ function checkCombatWithNearbyPlayers(uniqueUsersMap) {
 function triggerPlayerBattle(enemyData) {
   const currentEnemy = enemyData;
   
-  // Usamos el cuadro de confirmación nativo del navegador para evitar bloqueos de la librería externa
   const isConfirm = window.confirm(
     `⚔️ ¡ENEMIGO A LA VISTA! ⚔️\n\nTe has cruzado con ${currentEnemy.nick} (${currentEnemy.team ? currentEnemy.team.toUpperCase() : ''}) a menos de 15 metros.\n\n¿Quieres ATACAR? (Pulsa Cancelar para rendirte y huir)`
   );
@@ -881,40 +880,9 @@ function triggerPlayerBattle(enemyData) {
     penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
   }
 
-// Dejamos un margen de tiempo antes de permitir otro combate para evitar bucles
   setTimeout(() => {
     STATE.inBattle = false;
   }, 30000);
-} // <--- Este es el cierre correcto de la función triggerPlayerBattle
-  const currentEnemy = enemyData;
-  
-  swal({
-    title: "⚔️ ¡ENEMIGO A LA VISTA! ⚔️",
-    text: `¡Te has cruzado con ${currentEnemy.nick} (${currentEnemy.team ? currentEnemy.team.toUpperCase() : ''}) a menos de 15 metros!\n\n¿Quieres atacar o rendirte perdiendo una carta?`,
-    type: "warning",
-    showCancelButton: true,
-    confirmButtonText: "¡Atacar! 💥",
-    cancelButtonText: "Rendirse 🏃",
-    closeOnConfirm: true,
-    closeOnCancel: true
-  }, function(isConfirm) {
-    if (isConfirm) {
-      const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
-      const enemyPower = (currentEnemy.level || 1) * 10 + Math.random() * 50;
-
-      if (playerPower >= enemyPower) {
-        swal("¡Victoria Gloriosa! 🏆", `Has derrotado a ${currentEnemy.nick} en este sector. ¡Honor para el equipo!`, "success");
-      } else {
-        swal("¡Derrota! 💀", `El rival ${currentEnemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`, "error");
-        penalizePlayerCard("Has caído derrotado en combate.");
-      }
-    } else {
-      penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
-    }
-    setTimeout(() => {
-      STATE.inBattle = false;
-    }, 2000);
-  });
 }
 
 async function penalizePlayerCard(reasonText) {
