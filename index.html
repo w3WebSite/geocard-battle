@@ -280,27 +280,68 @@ window.showHowToPlay = function(){
   document.body.appendChild(helpModal);
 };
 
-// Panel y función de Administrador
-function showAdminConfigScreen() {
+// ==========================================
+// PANEL DE ADMINISTRACIÓN CON LISTADO Y BOTONES
+// ==========================================
+async function showAdminConfigScreen() {
   const adminModal = document.createElement("div");
   adminModal.className = "modal";
   adminModal.id = "adminModal";
-  adminModal.innerHTML = `
-    <div>
-      <h2>⚙️ Panel de Administración</h2>
-      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Bienvenido, Administrador. Aquí puedes gestionar las salas del juego.</p>
-      
-      <input id="adminRoomCodeInput" placeholder="Código de Sala a Crear/Gestionar"><br>
-      <input id="adminDurationInput" type="number" placeholder="Duración en minutos (Ej: 30)" value="30"><br><br>
-      
-      <button onclick="window.createOrUpdateRoom()" style="background:linear-gradient(45deg,#2a9d8f,#e9c46a); color:#073b4c;">Crear / Activar Sala 🚀</button><br>
-      <button onclick="location.reload()" style="background:linear-gradient(45deg,#e63946,#d62828);">Cerrar Sesión ✖️</button>
+
+  let roomsHTML = "<p style='color:#94a3b8; font-size:13px;'>Cargando salas...</p>";
+
+  const adminDiv = document.createElement("div");
+  adminDiv.style.cssText = "background:rgba(15, 23, 42, 0.92); backdrop-filter: blur(15px); color:white; padding:30px; border-radius:20px; box-shadow: 0 25px 50px rgba(0,0,0,0.7); max-width:550px; text-align:center; max-height:85vh; overflow-y:auto; border: 1px solid rgba(255,255,255,0.15);";
+  
+  adminDiv.innerHTML = `
+    <h2>⚙️ Panel de Administración</h2>
+    <p style="font-size:13px; color:#cbd5e1; margin-bottom:10px;">Crea nuevas salas o gestiona / elimina las existentes:</p>
+    
+    <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:10px; margin-bottom:15px; text-align:left;">
+      <input id="adminRoomCodeInput" placeholder="Código de nueva sala (Ej: SALA1)"><br>
+      <input id="adminDurationInput" type="number" placeholder="Duración en minutos (Ej: 30)" value="30"><br>
+      <button onclick="window.createNewRoom()" style="width:100%; background:linear-gradient(45deg,#2a9d8f,#e9c46a); color:#073b4c; margin:6px 0;">Crear Sala 🚀</button>
     </div>
+
+    <h3 style="font-size:15px; text-align:left; margin-bottom:5px;">📋 Listado de Salas Activas</h3>
+    <div id="adminRoomsList" style="max-height:200px; overflow-y:auto; text-align:left; padding-right:5px;">
+      ${roomsHTML}
+    </div><br>
+    
+    <button onclick="location.reload()" style="background:linear-gradient(45deg,#e63946,#d62828);">Cerrar Sesión ✖️</button>
   `;
+  
+  adminModal.appendChild(adminDiv);
   document.body.appendChild(adminModal);
+  loadAdminRoomsList();
 }
 
-window.createOrUpdateRoom = async function() {
+async function loadAdminRoomsList() {
+  const { data: rooms, error } = await supabase.from('rooms').select('*').order('code', { ascending: true });
+  const container = document.getElementById("adminRoomsList");
+  if(!container) return;
+
+  if(error || !rooms || rooms.length === 0) {
+    container.innerHTML = "<p style='color:#94a3b8; font-size:13px;'>No hay salas creadas todavía.</p>";
+    return;
+  }
+
+  let html = "";
+  rooms.forEach(r => {
+    html += `
+      <div class="room-item">
+        <span><b>🔑 ${r.code}</b> (${r.duration || 30} min)</span>
+        <div>
+          <button class="btn-enter" onclick="window.adminEnterRoom('${r.code}', ${r.duration || 30})">Entrar</button>
+          <button class="btn-delete" onclick="window.adminDeleteRoom('${r.code}')">Eliminar</button>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+window.createNewRoom = async function() {
   const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();
   const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
 
@@ -320,8 +361,46 @@ window.createOrUpdateRoom = async function() {
   if(error) {
     swal("Error", "No se pudo crear la sala en la base de datos", "error");
   } else {
-    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido configurada correctamente.`, "success");
+    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido creada correctamente.`, "success");
+    document.getElementById("adminRoomCodeInput").value = "";
+    loadAdminRoomsList();
   }
+};
+
+window.adminEnterRoom = function(code, duration) {
+  STATE.isAdmin = false;
+  STATE.user.nick = "AdminJugador";
+  STATE.user.playerClass = "⚔️ Guerrero";
+  STATE.user.email = `admin_player_${SESSION_ID}@game.com`;
+  STATE.roomCode = code;
+  STATE.team = "red";
+
+  document.getElementById("adminModal").remove();
+  launchGameEngine(duration);
+};
+
+window.adminDeleteRoom = async function(code) {
+  swal({
+    title: `¿Eliminar sala ${code}?`,
+    text: "Esto borrará la sala y todos sus datos de la base de datos.",
+    icon: "warning",
+    buttons: ["Cancelar", "Sí, eliminar"],
+    dangerMode: true,
+  }).then(async (willDelete) => {
+    if (willDelete) {
+      await supabase.from('geocaches').delete().eq('room_code', code);
+      await supabase.from('player_cards').delete().eq('room_code', code);
+      await supabase.from('geocard_mensajes').delete().eq('room_code', code);
+      const { error } = await supabase.from('rooms').delete().eq('code', code);
+
+      if(error) {
+        swal("Error", "No se pudo eliminar la sala", "error");
+      } else {
+        swal("Eliminado", "La sala y sus datos asociados han sido borrados.", "success");
+        loadAdminRoomsList();
+      }
+    }
+  });
 };
 
 window.processPlayerLogin = async function(){
