@@ -149,7 +149,7 @@ option { background: #0f172a; color: white; }
   </div>
 </div>
 
-<button id="btnExit" style="display:none;">Salir</button>
+<button id="btnExit" style="display:none;" onclick="location.reload()">Salir</button>
 <h2 id="timerContainer" style="display:none; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">⏱️: <span id="timer">00:00</span></h2>
 <div id="map"></div>
 
@@ -272,7 +272,7 @@ window.showHowToPlay = function(){
         <p><b>1. 🌍 Sin Fronteras:</b> Juega desde cualquier lugar del mundo usando tu ubicación GPS real.</p>
         <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y eliges una habilidad táctica especial.</p>
         <p><b>3. 🚶 Movimiento Dinámico:</b> Las cartas aparecen automáticamente a tu alrededor a medida que te desplazas.</p>
-        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros para luchar y defender tu territorio.</p>
+        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros para retarles a duelo (pueden aceptar o rechazar).</p>
       </div><br>
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>
     </div>
@@ -280,9 +280,6 @@ window.showHowToPlay = function(){
   document.body.appendChild(helpModal);
 };
 
-// ==========================================
-// PANEL DE ADMINISTRACIÓN CON LISTADO Y BOTONES
-// ==========================================
 async function showAdminConfigScreen() {
   const adminModal = document.createElement("div");
   adminModal.className = "modal";
@@ -371,7 +368,7 @@ window.adminEnterRoom = function(code, duration) {
   STATE.isAdmin = false;
   STATE.user.nick = "AdminJugador";
   STATE.user.playerClass = "⚔️ Guerrero";
-  STATE.user.email = `admin_player_${SESSION_ID}@game.com`;
+  STATE.user.email = `admin_player_${code}@game.com`;
   STATE.roomCode = code;
   STATE.team = "red";
 
@@ -440,7 +437,8 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;
   STATE.user.nick = nickInput;
   STATE.user.playerClass = playerClass;
-  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${SESSION_ID}@game.com`;
+  // CORREO PERSISTENTE: Se vincula al nick y sala para recuperar cartas al volver a entrar
+  STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${roomCodeInput}@game.com`;
   STATE.roomCode = roomCodeInput;
   STATE.team = team;
 
@@ -453,6 +451,9 @@ window.processPlayerLogin = async function(){
   if(!countErr && count !== null) {
     STATE.cardsCaptured = count;
     STATE.playerLevel = Math.floor(count / 5) + 1;
+  } else {
+    STATE.cardsCaptured = 0;
+    STATE.playerLevel = 1;
   }
 
   document.getElementById("redScore").innerText = roomData.red_score || 0;
@@ -524,6 +525,98 @@ function launchGameEngine(durationMinutes){
   listenChatMessages();
   startTimer(durationMinutes * 60);
   checkPlayerLevelProgression();
+}
+
+// ==========================================
+// SISTEMA DE PRESENCIA Y PROXIMIDAD PVP CON CONSENTIMIENTO
+// ==========================================
+function setupRealtimePresence(){
+  roomChannel = supabase.channel('room_' + STATE.roomCode, {
+    config: { presence: { key: STATE.user.email } }
+  });
+
+  roomChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = roomChannel.presenceState();
+      updateOnlinePlayersCount(state);
+      checkNearbyPlayersForBattle(state);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await roomChannel.track({
+          email: STATE.user.email,
+          session: SESSION_ID,
+          nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
+          lat: STATE.userLat, 
+          lng: STATE.userLng,
+          team: STATE.team, 
+          cardsCount: STATE.cardsCaptured,
+          level: STATE.playerLevel,
+          online_at: new Date().toISOString()
+        });
+      }
+    });
+}
+
+function updateOnlinePlayersCount(state) {
+  let count = 0;
+  Object.keys(state).forEach(key => {
+    count += state[key].length;
+  });
+  document.getElementById("onlineCount").innerText = count;
+}
+
+function checkNearbyPlayersForBattle(presenceState) {
+  if (STATE.inBattle) return;
+
+  const now = Date.now();
+  // Evitar que salten avisos continuos si se rechazó recientemente (cooldown de 45 segundos)
+  if (now - STATE.lastBattleTime < 45000) return;
+
+  Object.keys(presenceState).forEach(clientId => {
+    const presences = presenceState[clientId];
+    presences.forEach(p => {
+      if (p.email !== STATE.user.email && p.team !== STATE.team) {
+        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);
+        
+        // Si el enemigo está a menos de 15 metros
+        if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {
+          STATE.lastBattleTime = now;
+          STATE.lastEnemyBattled = p.email;
+          promptBattleConsent(p);
+        }
+      }
+    });
+  });
+}
+
+function promptBattleConsent(enemy) {
+  // Protección opcional: si el jugador no tiene cartas, se le avisa o se le da opción de huida automática
+  swal({
+    title: "⚔️ ¡Duelo Cercano Detectado!",
+    text: `Te has cruzado con el rival ${enemy.nick} a menos de 15 metros.\n¿Deseas aceptar el combate PvP o rechazar y huir?`,
+    icon: "warning",
+    buttons: {
+      cancel: "🏃 Huir / Rechazar",
+      accept: {
+        text: "⚔️ ¡Aceptar Batalla!",
+        value: "accept",
+      },
+    },
+  }).then((value) => {
+    if (value === "accept") {
+      triggerPvPBattle(enemy);
+    } else {
+      swal("Has huido con éxito 💨", "Te has retirado de la zona de combate de forma segura.", "info");
+    }
+  });
+}
+
+function triggerPvPBattle(enemy) {
+  STATE.inBattle = true;
+  swal("🔥 ¡BATALLA INICIADA! 🔥", `Estás combatiendo contra ${enemy.nick}.\n(Pantalla de combate en desarrollo)`, "success").then(() => {
+    STATE.inBattle = false;
+  });
 }
 
 async function loadChatMessages() {
@@ -714,13 +807,13 @@ function updateUserPositionOnMap(){
       lat: STATE.userLat, 
       lng: STATE.userLng,
       team: STATE.team, 
+      cardsCount: STATE.cardsCaptured,
       level: STATE.playerLevel,
       online_at: new Date().toISOString()
     }).catch(err => console.warn("Error tracking presence:", err));
   }
 }
 
-// Carga optimizada de cartas y limpieza de memoria
 async function loadGeocachesFromSupabase(){
   const { data, error } = await supabase
     .from('geocaches')
@@ -825,257 +918,33 @@ function checkPlayerLevelProgression() {
 
   if(calculatedLevel > STATE.playerLevel) {
     STATE.playerLevel = calculatedLevel;
-    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has subido de nivel! Elige tu ventaja táctica:", "success");
-    updateUserPositionOnMap();
-    showPerkSelectionModal();
+    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has subido de nivel!", "success");
   }
 
+  const cardsInCurrentLevel = STATE.cardsCaptured % 5;
   if(xpDisplay) {
-    const currentLevelBaseCards = (STATE.playerLevel - 1) * 5;
-    const progressInLevel = STATE.cardsCaptured - currentLevelBaseCards;
-    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${progressInLevel}/5 para el siguiente)`;
+    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${cardsInCurrentLevel}/5 para el siguiente)`;
   }
 }
-
-function showPerkSelectionModal() {
-  const perkModal = document.createElement("div");
-  perkModal.className = "modal";
-  perkModal.id = "perkModal";
-  perkModal.innerHTML = `
-    <div>
-      <h2>⚡ ¡Elige tu Habilidad de Nivel ${STATE.playerLevel}!</h2>
-      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Selecciona un beneficio táctico para potenciar tu aventura:</p>
-      <button onclick="window.selectPerk('tank')" style="width:90%; background:linear-gradient(45deg,#2a9d8f,#264653);">🛡️ Tanque Táctico (+Radio de Captura)</button><br>
-      <button onclick="window.selectPerk('berserker')" style="width:90%; background:linear-gradient(45deg,#e76f51,#f4a261);">⚔️ Furia Berserker (+15 Ataque en Cartas)</button><br>
-      <button onclick="window.selectPerk('radar')" style="width:90%; background:linear-gradient(45deg,#457b9d,#1d3557);">📡 Radar Ágil (Visión extendida)</button>
-    </div>
-  `;
-  document.body.appendChild(perkModal);
-}
-
-window.selectPerk = function(perkType) {
-  STATE.selectedPerk = perkType;
-  const perkNames = { tank: "Tanque Táctico 🛡️", berserker: "Furia Berserker ⚔️", radar: "Radar Ágil 📡" };
-  swal("¡Habilidad Activada!", `Has seleccionado: ${perkNames[perkType]}`, "success");
-  updateUserPositionOnMap();
-  document.getElementById("perkModal").remove();
-};
 
 function listenRoomChanges() {
   supabase.channel('public:rooms_' + STATE.roomCode)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      if(payload.new){
-        document.getElementById("redScore").innerText = payload.new.red_score || 0;
-        document.getElementById("blueScore").innerText = payload.new.blue_score || 0;
+      const room = payload.new;
+      document.getElementById("redScore").innerText = room.red_score || 0;
+      document.getElementById("blueScore").innerText = room.blue_score || 0;
+      if(room.active === false) {
+        swal("Partida Finalizada", "El administrador ha cerrado la sala.", "info").then(() => {
+          location.reload();
+        });
       }
     })
     .subscribe();
 }
 
-function setupRealtimePresence() {
-  if (roomChannel) {
-    supabase.removeChannel(roomChannel);
-    roomChannel = null;
-  }
-
-  const presenceKey = `${STATE.user.email}_${SESSION_ID}`;
-
-  roomChannel = supabase.channel('presence_room_' + STATE.roomCode, {
-    config: {
-      presence: {
-        key: presenceKey
-      }
-    }
-  });
-
-  roomChannel
-    .on('presence', { event: 'sync' }, () => {
-      const state = roomChannel.presenceState();
-      updatePlayerMarkers(state);
-      checkNearbyEnemies(state);
-    })
-    .on('presence', { event: 'join' }, () => {
-      const state = roomChannel.presenceState();
-      updatePlayerMarkers(state);
-      checkNearbyEnemies(state);
-    })
-    .on('presence', { event: 'leave' }, () => {
-      const state = roomChannel.presenceState();
-      updatePlayerMarkers(state);
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await roomChannel.track({
-          email: STATE.user.email,
-          session: SESSION_ID,
-          nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
-          lat: STATE.userLat, 
-          lng: STATE.userLng,
-          team: STATE.team, 
-          level: STATE.playerLevel,
-          online_at: new Date().toISOString()
-        });
-      }
-    });
-}
-
-function updatePlayerMarkers(presenceState) {
-  let uniqueUsersMap = {};
-
-  Object.keys(presenceState).forEach(key => {
-    const userPresences = presenceState[key];
-    if (Array.isArray(userPresences) && userPresences.length > 0) {
-      const latestData = userPresences[userPresences.length - 1];
-      if (latestData && latestData.session) {
-        uniqueUsersMap[latestData.session] = latestData;
-      }
-    }
-  });
-
-  const uniqueSessions = Object.keys(uniqueUsersMap);
-  const totalPlayers = uniqueSessions.length;
-
-  const onlineEl = document.getElementById("onlineCount");
-  if (onlineEl) {
-    onlineEl.innerText = totalPlayers > 0 ? totalPlayers : 1;
-  }
-
-  Object.keys(playerMarkers).forEach(sessionKey => {
-    if (!uniqueUsersMap[sessionKey]) {
-      if (playerMarkers[sessionKey]) {
-        STATE.map.removeLayer(playerMarkers[sessionKey]);
-        delete playerMarkers[sessionKey];
-      }
-    }
-  });
-
-  uniqueSessions.forEach(sessionKey => {
-    const data = uniqueUsersMap[sessionKey];
-    if (data.session === SESSION_ID) return;
-
-    const color = data.team === 'red' ? '#e63946' : '#1d3557';
-    let enemyGlow = "box-shadow:0 0 6px rgba(0,0,0,0.5);";
-    let enemyBadge = "";
-
-    if (data.level && data.level >= 2) {
-      enemyGlow = "box-shadow: 0 0 14px #e9c46a; border: 2px solid #e9c46a;";
-      enemyBadge = `<div style="position:absolute; top:-10px; right:-10px; background:#e9c46a; color:#073b4c; font-size:9px; font-weight:bold; padding:1px 3px; border-radius:4px;">⭐L${data.level}</div>`;
-    }
-
-    const playerIcon = L.divIcon({
-      className: "player-icon",
-      html: `<div style="position:relative; background:${color}; width:18px; height:18px; border-radius:50%; border:2px solid white; ${enemyGlow}">${enemyBadge}</div>`,
-      iconSize: [18, 18], 
-      iconAnchor: [9, 9]
-    });
-
-    if (playerMarkers[sessionKey]) {
-      playerMarkers[sessionKey].setLatLng([data.lat, data.lng]);
-      playerMarkers[sessionKey].setIcon(playerIcon);
-    } else {
-      const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-      marker.bindPopup(`<b>${data.nick}</b><br>Equipo: ${data.team === 'red' ? 'Rojo 🔴' : 'Azul 🔵'}`);
-      playerMarkers[sessionKey] = marker;
-    }
-  });
-}
-
-// ==========================================
-// SISTEMA DE COMBATE POR PROXIMIDAD (< 15 metros)
-// ==========================================
-function checkNearbyEnemies(presenceState) {
-  if (STATE.inBattle) return;
-
-  let uniqueUsersMap = {};
-  Object.keys(presenceState).forEach(key => {
-    const userPresences = presenceState[key];
-    if (Array.isArray(userPresences) && userPresences.length > 0) {
-      const latestData = userPresences[userPresences.length - 1];
-      if (latestData && latestData.session && latestData.session !== SESSION_ID) {
-        uniqueUsersMap[latestData.session] = latestData;
-      }
-    }
-  });
-
-  Object.values(uniqueUsersMap).forEach(enemy => {
-    if (enemy.team && enemy.team !== STATE.team) {
-      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
-      
-      if (distance <= 15) {
-        const now = Date.now();
-        if (STATE.lastEnemyBattled === enemy.email && (now - STATE.lastBattleTime < 30000)) {
-          return; 
-        }
-
-        STATE.lastBattleTime = now;
-        STATE.lastEnemyBattled = enemy.email;
-        
-        triggerCombatModal(enemy);
-      }
-    }
-  });
-}
-
-async function triggerCombatModal(enemy) {
-  STATE.inBattle = true;
-
-  const { data: myCards } = await supabase
-    .from('player_cards')
-    .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('user_email', STATE.user.email);
-
-  if (!myCards || myCards.length === 0) {
-    swal("¡Zona de Combate! ⚔️", `Te has encontrado con ${enemy.nick}, ¡pero no tienes cartas en tu inventario para luchar! Ve a capturar cartas al mapa primero.`, "warning");
-    STATE.inBattle = false;
-    return;
-  }
-
-  const randomCard = myCards[Math.floor(Math.random() * myCards.length)];
-  const enemyPower = (enemy.level || 1) * 40 + Math.floor(Math.random() * 50);
-  const myPower = randomCard.attack + randomCard.defense;
-
-  const combatModal = document.createElement("div");
-  combatModal.className = "modal";
-  combatModal.id = "combatModal";
-  combatModal.innerHTML = `
-    <div>
-      <h2>⚔️ ¡COMBATE DE TERRITORIO! ⚔️</h2>
-      <p style="font-size:13px; color:#cbd5e1;">Te enfrentas cuerpo a cuerpo contra <b>${enemy.nick}</b></p>
-      <div style="background:rgba(255,255,255,0.06); padding:12px; border-radius:10px; margin:10px 0; text-align:left;">
-        <p style="margin:4px 0;"><b>Tu carta:</b> ${randomCard.card_name} (Poder: ${myPower})</p>
-        <p style="margin:4px 0;"><b>Poder del rival:</b> ${enemyPower}</p>
-      </div>
-      <p id="combatResultText" style="font-size:14px; font-weight:bold; color:#38bdf8; margin:15px 0;"></p>
-      <button id="resolveCombatBtn" style="background:linear-gradient(45deg,#e63946,#d62828);">¡Atacar con todo! 💥</button>
-    </div>
-  `;
-  document.body.appendChild(combatModal);
-
-  document.getElementById("resolveCombatBtn").onclick = async () => {
-    const won = myPower >= enemyPower;
-    const resultText = document.getElementById("combatResultText");
-    
-    if (won) {
-      resultText.innerHTML = "🎉 ¡VICTORIA! Has derrotado al rival y defendido tu posición.";
-      swal("¡Victoria en Combate! 🏆", "Has ganado el enfrentamiento.", "success");
-    } else {
-      resultText.innerHTML = "💀 DERROTA... El rival era más fuerte esta vez.";
-      swal("Derrota 💧", "Has perdido el duelo por proximidad.", "error");
-    }
-
-    setTimeout(() => {
-      document.getElementById("combatModal").remove();
-      STATE.inBattle = false;
-    }, 2500);
-  };
-}
-
 function startTimer(durationSeconds) {
   let timer = durationSeconds;
-  const display = document.getElementById("timer");
-
-  if(timerInterval) clearInterval(timerInterval);
+  const timerDisplay = document.getElementById('timer');
 
   timerInterval = setInterval(() => {
     let minutes = parseInt(timer / 60, 10);
@@ -1084,30 +953,16 @@ function startTimer(durationSeconds) {
     minutes = minutes < 10 ? "0" + minutes : minutes;
     seconds = seconds < 10 ? "0" + seconds : seconds;
 
-    if(display) display.innerText = minutes + ":" + seconds;
+    if(timerDisplay) timerDisplay.textContent = minutes + ":" + seconds;
 
     if (--timer < 0) {
       clearInterval(timerInterval);
-      swal("⏰ ¡Partida Finalizada!", "El tiempo de la sala ha concluido.", "info").then(() => {
+      swal("¡Tiempo Agotado! ⌛", "La partida ha finalizado.", "info").then(() => {
         location.reload();
       });
     }
   }, 1000);
 }
-
-document.getElementById("btnExit").addEventListener("click", () => {
-  swal({
-    title: "¿Salir de la partida?",
-    text: "Volverás a la pantalla principal.",
-    icon: "warning",
-    buttons: ["Cancelar", "Sí, salir"],
-    dangerMode: true,
-  }).then((willExit) => {
-    if (willExit) {
-      location.reload();
-    }
-  });
-});
 </script>
 </body>
 </html>
