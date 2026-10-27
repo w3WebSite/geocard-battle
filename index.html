@@ -895,6 +895,50 @@ document.getElementById("btnExit").addEventListener("click", () => {
     }
   });
 });
+
+function showAdminConfigScreen() {
+  const adminModal = document.createElement("div");
+  adminModal.className = "modal";
+  adminModal.id = "adminModal";
+  adminModal.innerHTML = `
+    <div>
+      <h2>⚙️ Panel de Administración</h2>
+      <p style="font-size:13px; color:#cbd5e1; margin-bottom:15px;">Bienvenido, Administrador. Aquí puedes gestionar las salas del juego.</p>
+      
+      <input id="adminRoomCodeInput" placeholder="Código de Sala a Crear/Gestionar"><br>
+      <input id="adminDurationInput" type="number" placeholder="Duración en minutos (Ej: 30)" value="30"><br><br>
+      
+      <button onclick="window.createOrUpdateRoom()" style="background:linear-gradient(45deg,#2a9d8f,#e9c46a); color:#073b4c;">Crear / Activar Sala 🚀</button><br>
+      <button onclick="location.reload()" style="background:linear-gradient(45deg,#e63946,#d62828);">Cerrar Sesión ✖️</button>
+    </div>
+  `;
+  document.body.appendChild(adminModal);
+}
+
+window.createOrUpdateRoom = async function() {
+  const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();
+  const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
+
+  if(!code) {
+    swal("Error", "Introduce un código de sala válido", "warning");
+    return;
+  }
+
+  // Insertar o actualizar la sala en Supabase
+  const { error } = await supabase.from('rooms').upsert({
+    code: code,
+    active: true,
+    duration: duration,
+    red_score: 0,
+    blue_score: 0
+  }, { onConflict: 'code' });
+
+  if(error) {
+    swal("Error", "No se pudo crear la sala en la base de datos", "error");
+  } else {
+    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido configurada correctamente.`, "success");
+  }
+};
 </script>
 </body>
 </html>
