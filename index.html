@@ -511,30 +511,28 @@ async function checkAndSpawnCardsAroundPlayer() {
   }
 
   if (closeCount < 4) {
-    const newCardsToSpawn = 2;
-    for (let i = 0; i < newCardsToSpawn; i++) {
-      const radiusOffset = 0.001 + Math.random() * 0.002;
-      const angle = Math.random() * 2 * Math.PI;
-      const latOffset = radiusOffset * Math.cos(angle);
-      const lngOffset = radiusOffset * Math.sin(angle) / Math.cos(STATE.userLat * Math.PI / 180);
+    const radiusOffset = 0.001 + Math.random() * 0.0015;
+    const angle = Math.random() * 2 * Math.PI;
+    const latOffset = radiusOffset * Math.cos(angle);
+    const lngOffset = radiusOffset * Math.sin(angle) / Math.cos(STATE.userLat * Math.PI / 180);
 
-      const spawnLat = STATE.userLat + latOffset;
-      const spawnLng = STATE.userLng + lngOffset;
+    const spawnLat = STATE.userLat + latOffset;
+    const spawnLng = STATE.userLng + lngOffset;
 
-      const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+    const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
 
-      await supabase.from('geocaches').insert({
-        room_code: STATE.roomCode,
-        lat: spawnLat,
-        lng: spawnLng,
-        claimed: false,
-        card_name: randomTemplate.name,
-        card_type: randomTemplate.type || "Ataque",
-        attack: randomTemplate.attack,
-        defense: randomTemplate.defense,
-        image_url: ""
-      });
-    }
+    await supabase.from('geocaches').insert({
+      room_code: STATE.roomCode,
+      lat: spawnLat,
+      lng: spawnLng,
+      claimed: false,
+      card_name: randomTemplate.name,
+      card_type: randomTemplate.type || "Ataque",
+      attack: randomTemplate.attack,
+      defense: randomTemplate.defense,
+      image_url: ""
+    });
+    
     loadGeocachesFromSupabase();
   }
 }
@@ -599,65 +597,90 @@ function updateUserPositionOnMap(){
   }
 }
 
+// ==========================================
+// FUNCIÓN CORREGIDA: CARGA OPTIMIZADA Y LIMPIEZA DE DOM
+// ==========================================
 async function loadGeocachesFromSupabase(){
-  const { data, error } = await supabase.from('geocaches').select('*').eq('room_code', STATE.roomCode).eq('claimed', false);
+  const { data, error } = await supabase
+    .from('geocaches')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false);
+
   if(error || !data) return;
 
+  const visibleCacheIds = new Set();
+
   data.forEach(cache => {
-    if (mapMarkersList[cache.id]) return;
+    const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+    const MAX_VIEW_DISTANCE = 1500; // Solo mostrar cartas a menos de 1.5 km para evitar sobrecarga
 
-    const cacheIcon = L.divIcon({
-      className: "custom-card-icon",
-      html: `<div class="modernCardMarker">🎴</div>`,
-      iconSize: [36, 48], iconAnchor: [18, 24]
-    });
+    if (distance <= MAX_VIEW_DISTANCE) {
+      visibleCacheIds.add(cache.id);
 
-    const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
-    mapMarkersList[cache.id] = marker;
+      if (mapMarkersList[cache.id]) return;
 
-    marker.on("click", async () => {
-      let maxReach = 80;
-      if(STATE.selectedPerk === 'tank') maxReach = 105;
+      const cacheIcon = L.divIcon({
+        className: "custom-card-icon",
+        html: `<div class="modernCardMarker">🎴</div>`,
+        iconSize: [36, 48], iconAnchor: [18, 24]
+      });
 
-      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-      if(distance > maxReach){
-        swal("Estás muy lejos (" + Math.round(distance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
-        return;
-      }
+      const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+      mapMarkersList[cache.id] = marker;
 
-      await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
+      marker.on("click", async () => {
+        let maxReach = 80;
+        if(STATE.selectedPerk === 'tank') maxReach = 105;
 
-      STATE.cardsCaptured++;
-      checkPlayerLevelProgression();
+        const clickDistance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+        if(clickDistance > maxReach){
+          swal("Estás muy lejos (" + Math.round(clickDistance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
+          return;
+        }
 
-      const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-      let finalAttack = randomTemplate.attack;
-      let finalDefense = randomTemplate.defense;
-      if(STATE.selectedPerk === 'berserker') {
-        finalAttack += 15;
-      }
+        await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
 
-      const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', randomTemplate.name);
+        STATE.cardsCaptured++;
+        checkPlayerLevelProgression();
 
-      if(existingCards && existingCards.length > 0) {
-        const cardToUpgrade = existingCards[0];
-        const newAttack = cardToUpgrade.attack + 15;
-        const newDefense = cardToUpgrade.defense + 15;
-        await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
-        swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${randomTemplate.name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
-      } else {
-        await supabase.from('player_cards').insert({
-          room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
-          card_name: randomTemplate.name, attack: finalAttack, defense: finalDefense, image_url: ""
-        });
-        swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${randomTemplate.name}`, "success");
-      }
+        const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+        let finalAttack = randomTemplate.attack;
+        let finalDefense = randomTemplate.defense;
+        if(STATE.selectedPerk === 'berserker') {
+          finalAttack += 15;
+        }
 
-      if(mapMarkersList[cache.id]) {
-        STATE.map.removeLayer(mapMarkersList[cache.id]);
-        delete mapMarkersList[cache.id];
-      }
-    });
+        const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', randomTemplate.name);
+
+        if(existingCards && existingCards.length > 0) {
+          const cardToUpgrade = existingCards[0];
+          const newAttack = cardToUpgrade.attack + 15;
+          const newDefense = cardToUpgrade.defense + 15;
+          await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
+          swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${randomTemplate.name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
+        } else {
+          await supabase.from('player_cards').insert({
+            room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
+            card_name: randomTemplate.name, attack: finalAttack, defense: finalDefense, image_url: ""
+          });
+          swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${randomTemplate.name}`, "success");
+        }
+
+        if(mapMarkersList[cache.id]) {
+          STATE.map.removeLayer(mapMarkersList[cache.id]);
+          delete mapMarkersList[cache.id];
+        }
+      });
+    }
+  });
+
+  // Limpiar del mapa las cartas lejanas para liberar memoria en el móvil
+  Object.keys(mapMarkersList).forEach(id => {
+    if (!visibleCacheIds.has(id)) {
+      STATE.map.removeLayer(mapMarkersList[id]);
+      delete mapMarkersList[id];
+    }
   });
 }
 
@@ -829,207 +852,49 @@ function updatePlayerMarkers(presenceState) {
       playerMarkers[sessionKey].setIcon(playerIcon);
     } else {
       const marker = L.marker([data.lat, data.lng], { icon: playerIcon }).addTo(STATE.map);
-      marker.bindPopup(`<b>${data.nick || 'Jugador'}</b> (${data.team ? data.team.toUpperCase() : ''})<br>Nivel: ${data.level || 1}`);
+      marker.bindPopup(`<b>${data.nick}</b><br>Equipo: ${data.team === 'red' ? 'Rojo 🔴' : 'Azul 🔵'}`);
       playerMarkers[sessionKey] = marker;
     }
   });
-
-  checkCombatWithNearbyPlayers(uniqueUsersMap);
-}
-
-function checkCombatWithNearbyPlayers(uniqueUsersMap) {
-  if (STATE.inBattle) return;
-  const now = Date.now();
-  if (now - STATE.lastBattleTime < 35000) return;
-
-  Object.keys(uniqueUsersMap).forEach(sessionKey => {
-    const enemy = uniqueUsersMap[sessionKey];
-    if (enemy.session === SESSION_ID) return;
-
-    if (enemy.team && enemy.team !== STATE.team) {
-      const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, enemy.lat, enemy.lng);
-      
-      if (distance <= 15 && !STATE.inBattle) {
-        STATE.inBattle = true;
-        STATE.lastBattleTime = now;
-        STATE.lastEnemyBattled = enemy.session;
-        triggerPlayerBattle(enemy);
-      }
-    }
-  });
-}
-
-function triggerPlayerBattle(enemyData) {
-  const currentEnemy = enemyData;
-  
-  const isConfirm = window.confirm(
-    `⚔️ ¡ENEMIGO A LA VISTA! ⚔️\n\nTe has cruzado con ${currentEnemy.nick} (${currentEnemy.team ? currentEnemy.team.toUpperCase() : ''}) a menos de 15 metros.\n\n¿Quieres ATACAR? (Pulsa Cancelar para rendirte y huir)`
-  );
-
-  if (isConfirm) {
-    const playerPower = STATE.playerLevel * 10 + Math.random() * 50;
-    const enemyPower = (currentEnemy.level || 1) * 10 + Math.random() * 50;
-
-    if (playerPower >= enemyPower) {
-      window.alert(`¡Victoria Gloriosa! 🏆\n\nHas derrotado a ${currentEnemy.nick} en este sector. ¡Honor para el equipo!`);
-    } else {
-      window.alert(`¡Derrota! 💀\n\nEl rival ${currentEnemy.nick} era superior y te ha vencido. Has perdido una carta en la refriega.`);
-      penalizePlayerCard("Has caído derrotado en combate.");
-    }
-  } else {
-    penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
-  }
-
-  setTimeout(() => {
-    STATE.inBattle = false;
-  }, 30000);
-}
-
-async function penalizePlayerCard(reasonText) {
-  const { data: myCards, error } = await supabase
-    .from('player_cards')
-    .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('user_email', STATE.user.email);
-
-  if (error || !myCards || myCards.length === 0) {
-    swal("¡Te has librado!", `${reasonText} Sin embargo, no tenías ninguna carta en tu inventario, ¡así que conservas tus bienes!`, "info");
-    return;
-  }
-
-  const cardToLose = myCards[Math.floor(Math.random() * myCards.length)];
-
-  const { error: deleteErr } = await supabase
-    .from('player_cards')
-    .delete()
-    .eq('id', cardToLose.id);
-
-  if (!deleteErr) {
-    STATE.cardsCaptured = Math.max(0, STATE.cardsCaptured - 1);
-    checkPlayerLevelProgression();
-    swal("¡Carta Perdida! 📉", `${reasonText}\nHas perdido la carta: "${cardToLose.card_name}".`, "error");
-  }
 }
 
 function startTimer(durationSeconds) {
   let timer = durationSeconds;
-  const timerDisplay = document.getElementById("timer");
+  const display = document.getElementById("timer");
+
   if(timerInterval) clearInterval(timerInterval);
 
   timerInterval = setInterval(() => {
     let minutes = parseInt(timer / 60, 10);
     let seconds = parseInt(timer % 60, 10);
+
     minutes = minutes < 10 ? "0" + minutes : minutes;
     seconds = seconds < 10 ? "0" + seconds : seconds;
 
-    if(timerDisplay) timerDisplay.textContent = minutes + ":" + seconds;
+    if(display) display.innerText = minutes + ":" + seconds;
 
     if (--timer < 0) {
       clearInterval(timerInterval);
-      swal("¡Tiempo Terminado!", "La partida ha finalizado.", "info");
+      swal("⏰ ¡Partida Finalizada!", "El tiempo de la sala ha concluido.", "info").then(() => {
+        location.reload();
+      });
     }
   }, 1000);
 }
 
-document.getElementById("btnExit").addEventListener("click", async () => {
-  if (roomChannel) {
-    try {
-      await roomChannel.untrack();
-      supabase.removeChannel(roomChannel);
-    } catch (e) {
-      console.warn("Error al salir del canal:", e);
+document.getElementById("btnExit").addEventListener("click", () => {
+  swal({
+    title: "¿Salir de la partida?",
+    text: "Volverás a la pantalla principal.",
+    icon: "warning",
+    buttons: ["Cancelar", "Sí, salir"],
+    dangerMode: true,
+  }).then((willExit) => {
+    if (willExit) {
+      location.reload();
     }
-  }
-  window.location.reload();
-});
-
-async function showAdminConfigScreen(){
-  const modalDiv = document.createElement("div");
-  modalDiv.className = "modal";
-  modalDiv.id = "adminModal";
-
-  const { data: rooms } = await supabase.from('rooms').select('*');
-  let roomListHTML = "";
-
-  if(rooms && rooms.length > 0){
-    rooms.forEach(r => {
-      roomListHTML += `
-        <div class="room-item">
-          <span><b>${r.code}</b> (Global - ${r.duration}m)</span>
-          <div>
-            <button class="btn-enter" onclick="window.adminEnterRoom('${r.code}', ${r.duration})">👁️ Entrar</button>
-            <button class="btn-delete" onclick="window.deleteRoom('${r.code}')">🗑️ Borrar</button>
-          </div>
-        </div>
-      `;
-    });
-  } else {
-    roomListHTML = "<p style='font-size:12px; color:#94a3b8;'>No hay salas creadas aún.</p>";
-  }
-
-  modalDiv.innerHTML = `
-    <div>
-      <h2>👑 Panel del Administrador</h2>
-      <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; text-align:left; border:1px solid rgba(255,255,255,0.1);">
-        <b>Crear Nueva Sala Global:</b><br>
-        <input id="adminRoomCode" placeholder="Código (Ej: MUNDIAL2026)"><br>
-        <select id="adminDurationSelect">
-          <option value="15">15 minutos</option>
-          <option value="30" selected>30 minutos</option>
-          <option value="60">60 minutos</option>
-        </select><br>
-        <button onclick="window.createRoom()" style="width:100%;">Crear Sala 🚀</button>
-      </div>
-      <h3>Salas Activas:</h3>
-      <div style="max-height:180px; overflow-y:auto; text-align:left; padding-right:5px;">${roomListHTML}</div><br>
-      <button onclick="window.location.reload()" class="btn-secondary">Cerrar Sesión Admin ✖️</button>
-    </div>
-  `;
-  document.body.appendChild(modalDiv);
-}
-
-window.createRoom = async function(){
-  const code = document.getElementById("adminRoomCode").value.trim().toUpperCase();
-  const duration = parseInt(document.getElementById("adminDurationSelect").value);
-
-  if(!code) { swal("Error", "Ingresa un código para la sala", "warning"); return; }
-
-  const { error } = await supabase.from('rooms').insert({
-    code: code,
-    duration: duration,
-    active: true,
-    red_score: 0,
-    blue_score: 0
   });
-
-  if(error) {
-    swal("Error", "No se pudo crear la sala (quizás ya exista)", "error");
-    return;
-  }
-
-  swal("¡Sala Creada!", `La sala ${code} está lista para usarse en cualquier lugar.`, "success");
-  document.getElementById("adminModal").remove();
-  showAdminConfigScreen();
-};
-
-window.deleteRoom = async function(code){
-  await supabase.from('rooms').delete().eq('code', code);
-  swal("Eliminada", `La sala ${code} fue borrada.`, "info");
-  document.getElementById("adminModal").remove();
-  showAdminConfigScreen();
-};
-
-window.adminEnterRoom = function(code, duration){
-  STATE.isAdmin = false;
-  STATE.user.nick = "Admin Spectator";
-  STATE.user.playerClass = "⚔️ Guerrero";
-  STATE.user.email = "admin_spectator@game.com";
-  STATE.roomCode = code;
-  STATE.team = "red";
-
-  document.getElementById("adminModal").remove();
-  launchGameEngine(duration);
-};
+});
 </script>
 </body>
 </html>
