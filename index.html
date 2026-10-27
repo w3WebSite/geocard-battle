@@ -881,11 +881,11 @@ function triggerPlayerBattle(enemyData) {
     penalizePlayerCard("Te has rendido ante el enemigo y has tenido que ceder una carta.");
   }
 
-  // Dejamos un margen de tiempo antes de permitir otro combate para evitar bucles
+// Dejamos un margen de tiempo antes de permitir otro combate para evitar bucles
   setTimeout(() => {
     STATE.inBattle = false;
   }, 30000);
-}
+} // <--- Este es el cierre correcto de la función triggerPlayerBattle
   const currentEnemy = enemyData;
   
   swal({
