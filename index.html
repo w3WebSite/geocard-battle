@@ -173,6 +173,9 @@ const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const SESSION_ID = Math.random().toString(36).substring(2, 9);
 
+let unreadMessagesCount = 0;
+let isChatModalOpen = false;
+
 const STATE = {
   user: { email: "", nick: "", playerClass: "" },
   roomCode: null,
@@ -246,6 +249,30 @@ window.addEventListener('pagehide', () => {
     supabase.removeChannel(roomChannel);
   }
 });
+
+window.openChatModal = function() {
+  isChatModalOpen = true;
+  document.getElementById("chatModal").style.display = "flex";
+  unreadMessagesCount = 0;
+  updateChatBadge();
+  const messagesBox = document.getElementById("chatMessages");
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+};
+
+window.closeChatModal = function() {
+  isChatModalOpen = false;
+  document.getElementById("chatModal").style.display = "none";
+};
+
+function updateChatBadge() {
+  const badge = document.getElementById("chatBadge");
+  if (unreadMessagesCount > 0) {
+    badge.innerText = unreadMessagesCount;
+    badge.style.display = "block";
+  } else {
+    badge.style.display = "none";
+  }
+}
 
 function showLoginScreen(){
   const modalDiv = document.createElement("div");
@@ -528,7 +555,7 @@ function launchGameEngine(durationMinutes){
   document.getElementById("panel").style.display = "block";
   document.getElementById("btnExit").style.display = "inline-block";
   document.getElementById("timerContainer").style.display = "block";
-  document.getElementById("chatContainer").style.display = "flex";
+  document.getElementById("chatFloatingBtn").style.display = "flex";
 
   initMap();
   setupRealtimePresence();
@@ -710,14 +737,14 @@ async function loadChatMessages() {
   const container = document.getElementById("chatMessages");
   container.innerHTML = "";
   if(data) {
-    data.forEach(m => appendChatMessage(m));
+    data.forEach(m => appendChatMessage(m, false));
   }
 }
 
 function listenChatMessages() {
   supabase.channel('public:geocard_mensajes_' + STATE.roomCode)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocard_mensajes', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      appendChatMessage(payload.new);
+      appendChatMessage(payload.new, true);
     })
     .subscribe();
 }
@@ -737,24 +764,21 @@ async function sendChatMessage() {
   input.value = "";
 }
 
-function appendChatMessage(m) {
+function appendChatMessage(m, isNew = false) {
   const container = document.getElementById("chatMessages");
   const teamColor = m.team === 'red' ? '#e63946' : '#38bdf8';
   
   const div = document.createElement("div");
   div.style.marginBottom = "4px";
-  div.style.transition = "opacity 0.5s ease";
   div.innerHTML = `<b style="color:${teamColor};">${m.nick}:</b> ${escapeHtml(m.message)}`;
   
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 
-  setTimeout(() => {
-    if (div && div.parentNode) {
-      div.style.opacity = "0";
-      setTimeout(() => div.remove(), 500);
-    }
-  }, 60000);
+  if (isNew && !isChatModalOpen) {
+    unreadMessagesCount++;
+    updateChatBadge();
+  }
 }
 
 function escapeHtml(text) {
@@ -1033,11 +1057,13 @@ function startTimer(durationSeconds) {
     minutes = minutes < 10 ? "0" + minutes : minutes;
     seconds = seconds < 10 ? "0" + seconds : seconds;
 
-    if(timerDisplay) timerDisplay.textContent = minutes + ":" + seconds;
+    if(timerDisplay) {
+      timerDisplay.textContent = minutes + ":" + seconds;
+    }
 
     if (--timer < 0) {
       clearInterval(timerInterval);
-      swal("¡Tiempo Agotado! ⌛", "La partida ha finalizado.", "info").then(() => {
+      swal("⏱️ ¡Partida Finalizada!", "El tiempo de juego ha concluido.", "info").then(() => {
         location.reload();
       });
     }
