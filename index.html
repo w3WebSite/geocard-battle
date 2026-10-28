@@ -291,7 +291,6 @@ window.addEventListener('pagehide', () => {
   }
 });
 
-// 💬 Funciones para abrir y cerrar el modal de chat flotante
 window.openChatModal = function() {
   isChatModalOpen = true;
   document.getElementById("chatModal").style.display = "flex";
@@ -603,6 +602,7 @@ function launchGameEngine(durationMinutes){
   setupRealtimePresence();
   startGeolocationTracking();
   loadGeocachesFromSupabase();
+  spawnInitialCardsIfNeeded(); // 👈 ASEGURA QUE APAREZCAN CARTAS AL ENTRAR
   listenRoomChanges();
   listenGeocacheChanges();
   loadChatMessages();
@@ -845,6 +845,22 @@ function startGeolocationTracking(){
     );
   } else {
     updateUserPositionOnMap();
+  }
+}
+
+async function spawnInitialCardsIfNeeded() {
+  if (!STATE.roomCode) return;
+  const { data: existing } = await supabase
+    .from('geocaches')
+    .select('id')
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false)
+    .limit(1);
+
+  if (!existing || existing.length === 0) {
+    for (let i = 0; i < 4; i++) {
+      await checkAndSpawnCardsAroundPlayer();
+    }
   }
 }
 
