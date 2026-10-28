@@ -655,7 +655,6 @@ function promptBattleConsent(enemy) {
     }  });
 }
 
-// 🎴 Seleccionar carta para el combate (o usar carta por defecto)
 async function openBattleCardSelectionModal(enemy) {  
   STATE.inBattle = true;
 
@@ -698,26 +697,21 @@ window.confirmCardChoice = async function(cardIdx) {
   const modal = document.getElementById("battleModal");  
   if (modal) modal.remove();
 
-  // Bonificación por clase  
   let attackBonus = STATE.user.playerClass.includes("Guerrero") ? 15 : 0;  
   let defenseBonus = STATE.user.playerClass.includes("Guardián") ? 15 : 0;
 
   let myTotalPower = chosenCard.attack + chosenCard.defense + attackBonus + defenseBonus;    
-  // Simulación de respuesta enemiga (potencia aleatoria basada en nivel/cartas)  
   let enemyPower = Math.floor(Math.random() * 80) + 60; 
 
   if (myTotalPower >= enemyPower) {    
-    // 🏆 VICTORIA    
     STATE.cardsCaptured++;    
     checkPlayerLevelProgression();        
-    // Sumar 1 punto al contador del equipo en Supabase    
     const scoreField = STATE.team === 'red' ? 'red_score' : 'blue_score';    
     const currentScore = parseInt(document.getElementById(STATE.team + "Score").innerText) || 0;        
     await supabase.from('rooms').update({ [scoreField]: currentScore + 1 }).eq('code', STATE.roomCode);
 
     swal("🔥 ¡VICTORIA EN COMBATE! 🏆", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) ha superado a ${enemy.nick} (Poder: ${enemyPower}).\n\n+1 Punto para tu equipo y +1 de XP.`, "success");  
   } else {    
-    // 💀 DERROTA    
     swal("💔 DERROTA EN COMBATE", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) fue superada por ${enemy.nick} (Poder: ${enemyPower}).\n\nTienes un escudo de protección de 45 segundos.`, "error");  
   }
 
