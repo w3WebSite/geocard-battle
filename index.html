@@ -59,61 +59,33 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* 💬 Botón Flotante de Chat (Sustituye al contenedor fijo) */
-#chatFloatingBtn {
-  position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
-  background: linear-gradient(135deg, #2a9d8f, #1d3557);
-  border: 2px solid #e9c46a; border-radius: 50%; z-index: 600;
-  display: none; justify-content: center; align-items: center; font-size: 24px;
-  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transition: transform 0.2s ease;
+#chatContainer{
+  position: fixed; bottom: 15px; left: 15px; width: 300px; height: 210px;
+  background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; z-index: 600;
+  display: none; flex-direction: column; box-shadow: 0 8px 25px rgba(0,0,0,0.4);
 }
-#chatFloatingBtn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 8px 25px rgba(42, 157, 143, 0.8);
+#chatHeader{
+  padding: 8px 12px; background: rgba(42, 157, 143, 0.2); border-top-left-radius: 14px; border-top-right-radius: 14px;
+  font-size: 12px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between;
 }
-#chatBadge {
-  position: absolute; top: -5px; right: -5px;
-  background-color: #e63946; color: white; font-size: 12px; font-weight: bold;
-  padding: 2px 7px; border-radius: 50%; border: 2px solid white; display: none;
+#chatMessages{
+  flex: 1; height: 120px; max-height: 120px; overflow-y: auto; padding: 8px; font-size: 12px; text-align: right; display: flex; flex-direction: column; gap: 4px;
 }
-
-/* 💬 Modal Estético del Chat */
-#chatModal {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(5px); z-index: 2500; display: none;
-  justify-content: center; align-items: center; padding: 20px;
+#chatInputArea{
+  display: flex; padding: 6px; background: rgba(0,0,0,0.2); border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;
 }
-#chatModalContent {
-  background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(15px);
-  width: 100%; max-width: 380px; height: 420px; border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.15); display: flex; flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.7); overflow: hidden;
+#chatInput{
+  flex: 1; padding: 6px 10px; font-size: 12px; margin: 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
 }
-#chatHeaderModal {
-  padding: 12px 16px; background: rgba(42, 157, 143, 0.3);
-  font-size: 14px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1);
-  display: flex; justify-content: space-between; align-items: center;
-}
-#chatMessages {
-  flex: 1; overflow-y: auto; padding: 12px; font-size: 13px; text-align: left;
-  display: flex; flex-direction: column; gap: 6px;
-}
-#chatInputArea {
-  display: flex; padding: 10px; background: rgba(0,0,0,0.3);
-  border-top: 1px solid rgba(255,255,255,0.1); gap: 6px;
-}
-#chatInput {
-  flex: 1; padding: 8px 10px; font-size: 13px; margin: 0; border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
-  width: auto;
-}
-#chatSend {
-  margin: 0; padding: 8px 14px; font-size: 13px;
+#chatSend{
+  margin: 0 0 0 6px; padding: 6px 10px; font-size: 12px;
 }
 
 .leaflet-tile-pane {
   filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);
 }
+
 #map {
   height: 500px;
   width: 100%;
@@ -122,6 +94,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 10px 30px rgba(0,0,0,0.7), inset 0 0 20px rgba(0,0,0,0.8);
   border: 1px solid rgba(42, 157, 143, 0.4);
 }
+
 .modernCardMarker {
   width: 36px;
   height: 48px;
@@ -132,10 +105,12 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 14px rgba(233, 196, 106, 0.8), 0 4px 10px rgba(0,0,0,0.5);
   animation: floatCard 2.5s ease-in-out infinite; cursor: pointer; transition: transform 0.2s ease;
 }
+
 .modernCardMarker:hover {
   transform: scale(1.25) rotate(-3deg);
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
+
 .battle-card-option {
   background: rgba(255,255,255,0.08); border: 2px solid #2a9d8f;
   border-radius: 12px; padding: 10px; margin: 8px 0; cursor: pointer;
@@ -144,16 +119,19 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
 .battle-card-option:hover {
   background: rgba(42, 157, 143, 0.3); transform: scale(1.02);
 }
+
 @keyframes floatCard {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
 }
+
 input, select{ 
   width:80%; padding:10px; margin:8px 0; border-radius:8px; 
   border:1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
 }
 input::placeholder { color: rgba(255,255,255,0.5); }
 option { background: #0f172a; color: white; }
+
 .room-item{
   background: rgba(255,255,255,0.06); padding: 10px; margin: 6px 0; border-radius: 8px;
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;
@@ -171,24 +149,12 @@ option { background: #0f172a; color: white; }
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
-<!-- 💬 Botón Flotante con Contador -->
-<div id="chatFloatingBtn" onclick="openChatModal()">
-  💬
-  <span id="chatBadge">0</span>
-</div>
-
-<!-- 💬 Modal del Chat -->
-<div id="chatModal">
-  <div id="chatModalContent">
-    <div id="chatHeaderModal">
-      <span>💬 Chat de Partida</span>
-      <button onclick="closeChatModal()" style="background:none; border:none; color:white; font-size:16px; cursor:pointer; padding:0; margin:0; box-shadow:none;">✕</button>
-    </div>
-    <div id="chatMessages"></div>
-    <div id="chatInputArea">
-      <input id="chatInput" placeholder="Escribe un mensaje..." autocomplete="off">
-      <button id="chatSend">Enviar</button>
-    </div>
+<div id="chatContainer">
+  <div id="chatHeader">💬 Chat de Partida</div>
+  <div id="chatMessages"></div>
+  <div id="chatInputArea">
+    <input id="chatInput" placeholder="Escribe un mensaje..." autocomplete="off">
+    <button id="chatSend">Enviar</button>
   </div>
 </div>
 
@@ -206,9 +172,6 @@ const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON
 const ADMIN_KEYWORD = "paraquelavols";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const SESSION_ID = Math.random().toString(36).substring(2, 9);
-
-let unreadMessagesCount = 0;
-let isChatModalOpen = false;
 
 const STATE = {
   user: { email: "", nick: "", playerClass: "" },
@@ -284,30 +247,6 @@ window.addEventListener('pagehide', () => {
   }
 });
 
-window.openChatModal = function() {
-  isChatModalOpen = true;
-  document.getElementById("chatModal").style.display = "flex";
-  unreadMessagesCount = 0;
-  updateChatBadge();
-  const messagesBox = document.getElementById("chatMessages");
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-};
-
-window.closeChatModal = function() {
-  isChatModalOpen = false;
-  document.getElementById("chatModal").style.display = "none";
-};
-
-function updateChatBadge() {
-  const badge = document.getElementById("chatBadge");
-  if (unreadMessagesCount > 0) {
-    badge.innerText = unreadMessagesCount;
-    badge.style.display = "block";
-  } else {
-    badge.style.display = "none";
-  }
-}
-
 function showLoginScreen(){
   const modalDiv = document.createElement("div");
   modalDiv.className = "modal";
@@ -363,6 +302,7 @@ async function showAdminConfigScreen() {
   adminModal.id = "adminModal";
 
   let roomsHTML = "<p style='color:#94a3b8; font-size:13px;'>Cargando salas...</p>";
+
   const adminDiv = document.createElement("div");
   adminDiv.style.cssText = "background:rgba(15, 23, 42, 0.92); backdrop-filter: blur(15px); color:white; padding:30px; border-radius:20px; box-shadow: 0 25px 50px rgba(0,0,0,0.7); max-width:550px; text-align:center; max-height:85vh; overflow-y:auto; border: 1px solid rgba(255,255,255,0.15);";
   
@@ -588,7 +528,7 @@ function launchGameEngine(durationMinutes){
   document.getElementById("panel").style.display = "block";
   document.getElementById("btnExit").style.display = "inline-block";
   document.getElementById("timerContainer").style.display = "block";
-  document.getElementById("chatFloatingBtn").style.display = "flex";
+  document.getElementById("chatContainer").style.display = "flex";
 
   initMap();
   setupRealtimePresence();
@@ -770,14 +710,14 @@ async function loadChatMessages() {
   const container = document.getElementById("chatMessages");
   container.innerHTML = "";
   if(data) {
-    data.forEach(m => appendChatMessage(m, false));
+    data.forEach(m => appendChatMessage(m));
   }
 }
 
 function listenChatMessages() {
   supabase.channel('public:geocard_mensajes_' + STATE.roomCode)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocard_mensajes', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      appendChatMessage(payload.new, true);
+      appendChatMessage(payload.new);
     })
     .subscribe();
 }
@@ -797,22 +737,24 @@ async function sendChatMessage() {
   input.value = "";
 }
 
-function appendChatMessage(m, isNew = false) {
+function appendChatMessage(m) {
   const container = document.getElementById("chatMessages");
   const teamColor = m.team === 'red' ? '#e63946' : '#38bdf8';
   
   const div = document.createElement("div");
   div.style.marginBottom = "4px";
+  div.style.transition = "opacity 0.5s ease";
   div.innerHTML = `<b style="color:${teamColor};">${m.nick}:</b> ${escapeHtml(m.message)}`;
   
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 
-  // Si el modal está cerrado y llega un mensaje nuevo, sumamos al contador
-  if (isNew && !isChatModalOpen) {
-    unreadMessagesCount++;
-    updateChatBadge();
-  }
+  setTimeout(() => {
+    if (div && div.parentNode) {
+      div.style.opacity = "0";
+      setTimeout(() => div.remove(), 500);
+    }
+  }, 60000);
 }
 
 function escapeHtml(text) {
@@ -924,6 +866,7 @@ function updateUserPositionOnMap(){
 
   let circleRadius = 60;
   if(STATE.selectedPerk === 'tank') circleRadius = 85;
+
   if(STATE.rangeCircle){
     STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
     STATE.rangeCircle.setRadius(circleRadius);
@@ -932,103 +875,156 @@ function updateUserPositionOnMap(){
       color: color, fillColor: color, fillOpacity: 0.15, radius: circleRadius
     }).addTo(STATE.map);
   }
+
+  const movedDist = getDistanceInMeters(lastTrackedLat, lastTrackedLng, STATE.userLat, STATE.userLng);
+  if(roomChannel && (lastTrackedLat === 0 || movedDist > 5)) {
+    lastTrackedLat = STATE.userLat;
+    lastTrackedLng = STATE.userLng;
+    roomChannel.track({
+      email: STATE.user.email,
+      session: SESSION_ID,
+      nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
+      lat: STATE.userLat, 
+      lng: STATE.userLng,
+      team: STATE.team, 
+      cardsCount: STATE.cardsCaptured,
+      level: STATE.playerLevel,
+      online_at: new Date().toISOString()
+    }).catch(err => console.warn("Error tracking presence:", err));
+  }
 }
 
-async function loadGeocachesFromSupabase() {
-  if (!STATE.roomCode) return;
-  const { data: caches } = await supabase
+async function loadGeocachesFromSupabase(){
+  const { data, error } = await supabase
     .from('geocaches')
     .select('*')
     .eq('room_code', STATE.roomCode)
     .eq('claimed', false);
 
-  Object.values(mapMarkersList).forEach(m => STATE.map.removeLayer(m));
-  mapMarkersList = {};
+  if(error || !data) return;
 
-  if (caches) {
-    caches.forEach(c => {
-      const cardIcon = L.divIcon({
-        className: 'modernCardMarker',
-        html: `🎴`,
-        iconSize: [36, 48],
-        iconAnchor: [18, 24]
+  const visibleCacheIds = new Set();
+
+  data.forEach(cache => {
+    const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+    const MAX_VIEW_DISTANCE = 1500;
+
+    if (distance <= MAX_VIEW_DISTANCE) {
+      visibleCacheIds.add(cache.id);
+
+      if (mapMarkersList[cache.id]) return;
+
+      const cacheIcon = L.divIcon({
+        className: "custom-card-icon",
+        html: `<div class="modernCardMarker">🎴</div>`,
+        iconSize: [36, 48], iconAnchor: [18, 24]
       });
 
-      const marker = L.marker([c.lat, c.lng], { icon: cardIcon }).addTo(STATE.map);
-      marker.on('click', () => attemptClaimCard(c));
-      mapMarkersList[c.id] = marker;
-    });
-  }
+      const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
+      mapMarkersList[cache.id] = marker;
+
+      marker.on("click", async () => {
+        let maxReach = 80;
+        if(STATE.selectedPerk === 'tank') maxReach = 105;
+
+        const clickDistance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+        if(clickDistance > maxReach){
+          swal("Estás muy lejos (" + Math.round(clickDistance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
+          return;
+        }
+
+        await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
+
+        STATE.cardsCaptured++;
+        checkPlayerLevelProgression();
+
+        const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+        let finalAttack = randomTemplate.attack;
+        let finalDefense = randomTemplate.defense;
+        if(STATE.selectedPerk === 'berserker') {
+          finalAttack += 15;
+        }
+
+        const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', randomTemplate.name);
+
+        if(existingCards && existingCards.length > 0) {
+          const cardToUpgrade = existingCards[0];
+          const newAttack = cardToUpgrade.attack + 15;
+          const newDefense = cardToUpgrade.defense + 15;
+          await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
+          swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${randomTemplate.name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
+        } else {
+          await supabase.from('player_cards').insert({
+            room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
+            card_name: randomTemplate.name, attack: finalAttack, defense: finalDefense, image_url: ""
+          });
+          swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${randomTemplate.name}`, "success");
+        }
+
+        if(mapMarkersList[cache.id]) {
+          STATE.map.removeLayer(mapMarkersList[cache.id]);
+          delete mapMarkersList[cache.id];
+        }
+      });
+    }
+  });
+
+  Object.keys(mapMarkersList).forEach(id => {
+    if (!visibleCacheIds.has(id)) {
+      STATE.map.removeLayer(mapMarkersList[id]);
+      delete mapMarkersList[id];
+    }
+  });
 }
 
 function listenGeocacheChanges() {
   supabase.channel('public:geocaches_' + STATE.roomCode)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, () => {
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      const updatedCache = payload.new;
+      if (updatedCache.claimed && mapMarkersList[updatedCache.id]) {
+        STATE.map.removeLayer(mapMarkersList[updatedCache.id]);
+        delete mapMarkersList[updatedCache.id];
+      }
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
       loadGeocachesFromSupabase();
     })
     .subscribe();
 }
 
+function checkPlayerLevelProgression() {
+  const xpDisplay = document.getElementById("playerXpDisplay");
+  const calculatedLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
+
+  if(calculatedLevel > STATE.playerLevel) {
+    STATE.playerLevel = calculatedLevel;
+    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has subido de nivel!", "success");
+  }
+
+  const cardsInCurrentLevel = STATE.cardsCaptured % 5;
+  if(xpDisplay) {
+    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${cardsInCurrentLevel}/5 para el siguiente)`;
+  }
+}
+
 function listenRoomChanges() {
   supabase.channel('public:rooms_' + STATE.roomCode)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      if (payload.new) {
-        document.getElementById("redScore").innerText = payload.new.red_score || 0;
-        document.getElementById("blueScore").innerText = payload.new.blue_score || 0;
+      const room = payload.new;
+      document.getElementById("redScore").innerText = room.red_score || 0;
+      document.getElementById("blueScore").innerText = room.blue_score || 0;
+      if(room.active === false) {
+        swal("Partida Finalizada", "El administrador ha cerrado la sala.", "info").then(() => {
+          location.reload();
+        });
       }
     })
     .subscribe();
 }
 
-async function attemptClaimCard(cache) {
-  const dist = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-  if (dist > 50) {
-    swal("Demasiado lejos 🏃", `Estás a ${Math.round(dist)} metros. Acércate a menos de 50 metros para capturar esta carta.`, "warning");
-    return;
-  }
-
-  const { error } = await supabase
-    .from('geocaches')
-    .update({ claimed: true })
-    .eq('id', cache.id)
-    .eq('claimed', false);
-
-  if (error) {
-    swal("¡Alguien se adelantó! ⚡", "Esta carta ya ha sido reclamada por otro jugador.", "info");
-    loadGeocachesFromSupabase();
-    return;
-  }
-
-  await supabase.from('player_cards').insert({
-    room_code: STATE.roomCode,
-    user_email: STATE.user.email,
-    card_name: cache.card_name,
-    attack: cache.attack,
-    defense: cache.defense,
-    card_type: cache.card_type
-  });
-
-  STATE.cardsCaptured++;
-  checkPlayerLevelProgression();
-
-  swal("¡Carta Capturada! 🎴✨", `Has conseguido: ${cache.card_name}\n⚔️ Ataque: ${cache.attack} | 🛡️ Defensa: ${cache.defense}`, "success");
-  loadGeocachesFromSupabase();
-}
-
-function checkPlayerLevelProgression() {
-  const newLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
-  if(newLevel > STATE.playerLevel) {
-    STATE.playerLevel = newLevel;
-    swal("🎉 ¡SUBISTE DE NIVEL!", `¡Felicidades! Has alcanzado el Nivel ${STATE.playerLevel}. Tus bonificaciones de combate y estadísticas han mejorado.`, "success");
-  }
-  document.getElementById("playerXpDisplay").innerText = `Nivel ${STATE.playerLevel} (${STATE.cardsCaptured % 5}/5)`;
-}
-
 function startTimer(durationSeconds) {
   let timer = durationSeconds;
-  const timerDisplay = document.getElementById("timer");
-
-  if (timerInterval) clearInterval(timerInterval);
+  const timerDisplay = document.getElementById('timer');
 
   timerInterval = setInterval(() => {
     let minutes = parseInt(timer / 60, 10);
@@ -1037,11 +1033,11 @@ function startTimer(durationSeconds) {
     minutes = minutes < 10 ? "0" + minutes : minutes;
     seconds = seconds < 10 ? "0" + seconds : seconds;
 
-    timerDisplay.textContent = minutes + ":" + seconds;
+    if(timerDisplay) timerDisplay.textContent = minutes + ":" + seconds;
 
     if (--timer < 0) {
       clearInterval(timerInterval);
-      swal("⏱️ ¡Partida Finalizada!", "El tiempo de juego ha concluido.", "info").then(() => {
+      swal("¡Tiempo Agotado! ⌛", "La partida ha finalizado.", "info").then(() => {
         location.reload();
       });
     }
