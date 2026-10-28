@@ -761,6 +761,7 @@ function appendChatMessage(m, isNew = false) {
   
   const div = document.createElement("div");  
   div.style.marginBottom = "4px";  
+  div.style.transition = "opacity 0.5s ease";  
   div.innerHTML = `<b style="color:${teamColor};">${m.nick}:</b> ${escapeHtml(m.message)}`;    
   
   container.appendChild(div);  
@@ -770,6 +771,14 @@ function appendChatMessage(m, isNew = false) {
     unreadMessagesCount++;
     updateChatBadge();
   }
+
+  // ⏱️ Auto-borrado suave a los 60 segundos (1 minuto)
+  setTimeout(() => {
+    if (div && div.parentNode) {
+      div.style.opacity = "0";
+      setTimeout(() => div.remove(), 500);
+    }
+  }, 60000);
 }
 
 function escapeHtml(text) {  
