@@ -598,11 +598,30 @@ function launchGameEngine(durationMinutes){
   document.getElementById("timerContainer").style.display = "block";
   document.getElementById("chatFloatingBtn").style.display = "flex";
 
+  if ("geolocation" in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        STATE.userLat = position.coords.latitude;
+        STATE.userLng = position.coords.longitude;
+        startEngineBoot(durationMinutes);
+      },
+      (error) => {
+        console.warn("No se pudo obtener la geolocalización inicial, usando valores por defecto.");
+        startEngineBoot(durationMinutes);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  } else {
+    startEngineBoot(durationMinutes);
+  }
+}
+
+function startEngineBoot(durationMinutes) {
   initMap();
   setupRealtimePresence();
   startGeolocationTracking();
   loadGeocachesFromSupabase();
-  spawnInitialCardsIfNeeded(); // 👈 ASEGURA QUE APAREZCAN CARTAS AL ENTRAR
+  spawnInitialCardsIfNeeded(); 
   listenRoomChanges();
   listenGeocacheChanges();
   loadChatMessages();
