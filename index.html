@@ -59,7 +59,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* 💬 Botón Flotante de Chat */
+/* 💬 Botón Flotante de Chat (Sustituye al contenedor fijo) */
 #chatFloatingBtn {
   position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
   background: linear-gradient(135deg, #2a9d8f, #1d3557);
@@ -77,7 +77,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   padding: 2px 7px; border-radius: 50%; border: 2px solid white; display: none;
 }
 
-/* 💬 Modal de Chat */
+/* 💬 Modal Estético del Chat */
 #chatModal {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6);
   backdrop-filter: blur(5px); z-index: 2500; display: none;
@@ -114,7 +114,6 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
 .leaflet-tile-pane {
   filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);
 }
-
 #map {
   height: 500px;
   width: 100%;
@@ -123,7 +122,6 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 10px 30px rgba(0,0,0,0.7), inset 0 0 20px rgba(0,0,0,0.8);
   border: 1px solid rgba(42, 157, 143, 0.4);
 }
-
 .modernCardMarker {
   width: 36px;
   height: 48px;
@@ -134,12 +132,10 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 14px rgba(233, 196, 106, 0.8), 0 4px 10px rgba(0,0,0,0.5);
   animation: floatCard 2.5s ease-in-out infinite; cursor: pointer; transition: transform 0.2s ease;
 }
-
 .modernCardMarker:hover {
   transform: scale(1.25) rotate(-3deg);
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
-
 .battle-card-option {
   background: rgba(255,255,255,0.08); border: 2px solid #2a9d8f;
   border-radius: 12px; padding: 10px; margin: 8px 0; cursor: pointer;
@@ -148,19 +144,16 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
 .battle-card-option:hover {
   background: rgba(42, 157, 143, 0.3); transform: scale(1.02);
 }
-
 @keyframes floatCard {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
 }
-
 input, select{ 
   width:80%; padding:10px; margin:8px 0; border-radius:8px; 
   border:1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
 }
 input::placeholder { color: rgba(255,255,255,0.5); }
 option { background: #0f172a; color: white; }
-
 .room-item{
   background: rgba(255,255,255,0.06); padding: 10px; margin: 6px 0; border-radius: 8px;
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;
@@ -178,7 +171,7 @@ option { background: #0f172a; color: white; }
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
 </div>
 
-<!-- 💬 Botón Flotante con Contador de Mensajes -->
+<!-- 💬 Botón Flotante con Contador -->
 <div id="chatFloatingBtn" onclick="openChatModal()">
   💬
   <span id="chatBadge">0</span>
@@ -188,7 +181,7 @@ option { background: #0f172a; color: white; }
 <div id="chatModal">
   <div id="chatModalContent">
     <div id="chatHeaderModal">
-      <span>💬 Chat de Partida Global</span>
+      <span>💬 Chat de Partida</span>
       <button onclick="closeChatModal()" style="background:none; border:none; color:white; font-size:16px; cursor:pointer; padding:0; margin:0; box-shadow:none;">✕</button>
     </div>
     <div id="chatMessages"></div>
@@ -370,7 +363,6 @@ async function showAdminConfigScreen() {
   adminModal.id = "adminModal";
 
   let roomsHTML = "<p style='color:#94a3b8; font-size:13px;'>Cargando salas...</p>";
-
   const adminDiv = document.createElement("div");
   adminDiv.style.cssText = "background:rgba(15, 23, 42, 0.92); backdrop-filter: blur(15px); color:white; padding:30px; border-radius:20px; box-shadow: 0 25px 50px rgba(0,0,0,0.7); max-width:550px; text-align:center; max-height:85vh; overflow-y:auto; border: 1px solid rgba(255,255,255,0.15);";
   
@@ -598,30 +590,10 @@ function launchGameEngine(durationMinutes){
   document.getElementById("timerContainer").style.display = "block";
   document.getElementById("chatFloatingBtn").style.display = "flex";
 
-  if ("geolocation" in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        STATE.userLat = position.coords.latitude;
-        STATE.userLng = position.coords.longitude;
-        startEngineBoot(durationMinutes);
-      },
-      (error) => {
-        console.warn("No se pudo obtener la geolocalización inicial, usando valores por defecto.");
-        startEngineBoot(durationMinutes);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  } else {
-    startEngineBoot(durationMinutes);
-  }
-}
-
-function startEngineBoot(durationMinutes) {
   initMap();
   setupRealtimePresence();
   startGeolocationTracking();
   loadGeocachesFromSupabase();
-  spawnInitialCardsIfNeeded(); 
   listenRoomChanges();
   listenGeocacheChanges();
   loadChatMessages();
@@ -712,6 +684,7 @@ function promptBattleConsent(enemy) {
   });
 }
 
+// 🎴 Seleccionar carta para el combate (o usar carta por defecto)
 async function openBattleCardSelectionModal(enemy) {
   STATE.inBattle = true;
 
@@ -757,16 +730,21 @@ window.confirmCardChoice = async function(cardIdx) {
   const modal = document.getElementById("battleModal");
   if (modal) modal.remove();
 
+  // Bonificación por clase
   let attackBonus = STATE.user.playerClass.includes("Guerrero") ? 15 : 0;
   let defenseBonus = STATE.user.playerClass.includes("Guardián") ? 15 : 0;
 
   let myTotalPower = chosenCard.attack + chosenCard.defense + attackBonus + defenseBonus;
+  
+  // Simulación de respuesta enemiga (potencia aleatoria basada en nivel/cartas)
   let enemyPower = Math.floor(Math.random() * 80) + 60; 
 
   if (myTotalPower >= enemyPower) {
+    // 🏆 VICTORIA
     STATE.cardsCaptured++;
     checkPlayerLevelProgression();
     
+    // Sumar 1 punto al contador del equipo en Supabase
     const scoreField = STATE.team === 'red' ? 'red_score' : 'blue_score';
     const currentScore = parseInt(document.getElementById(STATE.team + "Score").innerText) || 0;
     
@@ -774,6 +752,7 @@ window.confirmCardChoice = async function(cardIdx) {
 
     swal("🔥 ¡VICTORIA EN COMBATE! 🏆", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) ha superado a ${enemy.nick} (Poder: ${enemyPower}).\n\n+1 Punto para tu equipo y +1 de XP.`, "success");
   } else {
+    // 💀 DERROTA
     swal("💔 DERROTA EN COMBATE", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) fue superada por ${enemy.nick} (Poder: ${enemyPower}).\n\nTienes un escudo de protección de 45 segundos.`, "error");
   }
 
@@ -829,6 +808,7 @@ function appendChatMessage(m, isNew = false) {
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 
+  // Si el modal está cerrado y llega un mensaje nuevo, sumamos al contador
   if (isNew && !isChatModalOpen) {
     unreadMessagesCount++;
     updateChatBadge();
@@ -864,22 +844,6 @@ function startGeolocationTracking(){
     );
   } else {
     updateUserPositionOnMap();
-  }
-}
-
-async function spawnInitialCardsIfNeeded() {
-  if (!STATE.roomCode) return;
-  const { data: existing } = await supabase
-    .from('geocaches')
-    .select('id')
-    .eq('room_code', STATE.roomCode)
-    .eq('claimed', false)
-    .limit(1);
-
-  if (!existing || existing.length === 0) {
-    for (let i = 0; i < 4; i++) {
-      await checkAndSpawnCardsAroundPlayer();
-    }
   }
 }
 
@@ -953,7 +917,20 @@ function updateUserPositionOnMap(){
     STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
     STATE.userMarker.setIcon(playerIcon);
   } else {
-    STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon }).addTo(STATE.map);
+    STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);
+    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (${STATE.user.playerClass})</b><br>Nivel XP: ${STATE.playerLevel}`);
+    STATE.map.setView([STATE.userLat, STATE.userLng], 16);
+  }
+
+  let circleRadius = 60;
+  if(STATE.selectedPerk === 'tank') circleRadius = 85;
+  if(STATE.rangeCircle){
+    STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
+    STATE.rangeCircle.setRadius(circleRadius);
+  } else {
+    STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], {
+      color: color, fillColor: color, fillOpacity: 0.15, radius: circleRadius
+    }).addTo(STATE.map);
   }
 }
 
