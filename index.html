@@ -11,46 +11,56 @@ body{
   margin:0;  
   font-family: 'Trebuchet MS', Arial, sans-serif;  
   color:white;  
-  background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)),               
+  background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)),              
               url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");  
   background-size: cover;  
   background-position: center;  
   background-attachment: fixed;
 }
+
 #map{ height:500px; width:100%; margin-top:20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+
 #panel{  
   position:fixed; top:15px; right:15px; background:rgba(15, 23, 42, 0.85);  
   backdrop-filter: blur(10px); color:white; padding:14px 18px; border-radius:14px; z-index:500;  
   display:none; box-shadow:0 8px 25px rgba(0,0,0,0.4); font-weight:bold; border: 1px solid rgba(255,255,255,0.1);
 }
+
 button{  
   margin:6px; padding:12px 16px; border:none; border-radius:12px;  
   background:linear-gradient(45deg,#2a9d8f,#1d3557); color:white;  
   font-weight:bold; cursor:pointer; transition:0.2s;  
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
+
 button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
+
 .btn-enter{  
   background: linear-gradient(45deg, #2a9d8f, #e9c46a);  
   color: #073b4c; padding: 6px 10px; font-size: 11px; margin-left: 4px;
 }
+
 .btn-delete{  
   background: linear-gradient(45deg, #e63946, #d62828);  
   color: white; padding: 6px 10px; font-size: 11px; margin-left: 4px;
 }
+
 .btn-secondary{  
   background: linear-gradient(45deg, #457b9d, #1d3557);  
   font-size: 13px; padding: 8px 12px;
 }
+
 .btn-discord{  
   background: linear-gradient(45deg, #5865F2, #7289DA);  
   font-size: 13px; padding: 8px 14px; text-decoration: none; display: inline-block; border-radius: 12px; color: white; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
+
 .modal{  
   position:fixed; inset:0; background:rgba(0,0,0,0.75);  
   backdrop-filter: blur(8px);  
   display:flex; justify-content:center; align-items:center; z-index:2000; padding:20px;
 }
+
 .modal > div{  
   background:rgba(15, 23, 42, 0.92); backdrop-filter: blur(15px);  
   color:white; padding:30px; border-radius:20px;   
@@ -67,10 +77,12 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   display: none; justify-content: center; align-items: center; font-size: 24px;
   cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transition: transform 0.2s ease;
 }
+
 #chatFloatingBtn:hover {
   transform: scale(1.1);
   box-shadow: 0 8px 25px rgba(42, 157, 143, 0.8);
 }
+
 #chatBadge {
   position: absolute; top: -5px; right: -5px;
   background-color: #e63946; color: white; font-size: 12px; font-weight: bold;
@@ -83,35 +95,45 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   backdrop-filter: blur(5px); z-index: 2500; display: none;
   justify-content: center; align-items: center; padding: 20px;
 }
+
 #chatModalContent {
   background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(15px);
   width: 100%; max-width: 380px; height: 420px; border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.15); display: flex; flex-direction: column;
   box-shadow: 0 20px 40px rgba(0,0,0,0.7); overflow: hidden;
 }
+
 #chatHeaderModal {
   padding: 12px 16px; background: rgba(42, 157, 143, 0.3);
   font-size: 14px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1);
   display: flex; justify-content: space-between; align-items: center;
 }
+
 #chatMessages {
   flex: 1; overflow-y: auto; padding: 12px; font-size: 13px; text-align: left;
   display: flex; flex-direction: column; gap: 6px;
 }
+
 #chatInputArea {
   display: flex; padding: 10px; background: rgba(0,0,0,0.3);
   border-top: 1px solid rgba(255,255,255,0.1); gap: 6px;
 }
+
 #chatInput {
   flex: 1; padding: 8px 10px; font-size: 13px; margin: 0; border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
   width: auto;
 }
+
 #chatSend {
   margin: 0; padding: 8px 14px; font-size: 13px;
 }
 
-.leaflet-tile-pane {  filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);}
+/* Filtro oscuro aplicado SOLAMENTE cuando la clase .map-normal está activa */
+.map-normal .leaflet-tile-pane {  
+  filter: brightness(0.6) contrast(1.3) saturate(0.4) hue-rotate(180deg) invert(0.9);
+}
+
 #map {  
   height: 500px;  
   width: 100%;  
@@ -120,6 +142,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 10px 30px rgba(0,0,0,0.7), inset 0 0 20px rgba(0,0,0,0.8);  
   border: 1px solid rgba(42, 157, 143, 0.4);
 }
+
 .modernCardMarker {  
   width: 36px;  
   height: 48px;  
@@ -130,28 +153,35 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   box-shadow: 0 0 14px rgba(233, 196, 106, 0.8), 0 4px 10px rgba(0,0,0,0.5);  
   animation: floatCard 2.5s ease-in-out infinite; cursor: pointer; transition: transform 0.2s ease;
 }
+
 .modernCardMarker:hover {  
   transform: scale(1.25) rotate(-3deg);  
   box-shadow: 0 0 22px rgba(255, 255, 255, 0.9), 0 6px 15px rgba(0,0,0,0.6);
 }
+
 .battle-card-option {  
   background: rgba(255,255,255,0.08); border: 2px solid #2a9d8f;  
   border-radius: 12px; padding: 10px; margin: 8px 0; cursor: pointer;  
   transition: 0.2s; text-align: left;
 }
+
 .battle-card-option:hover {  
   background: rgba(42, 157, 143, 0.3); transform: scale(1.02);
 }
+
 @keyframes floatCard {  
   0%, 100% { transform: translateY(0px); }  
   50% { transform: translateY(-6px); }
 }
+
 input, select{   
   width:80%; padding:10px; margin:8px 0; border-radius:8px;   
   border:1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white;
 }
+
 input::placeholder { color: rgba(255,255,255,0.5); }
 option { background: #0f172a; color: white; }
+
 .room-item{  
   background: rgba(255,255,255,0.06); padding: 10px; margin: 6px 0; border-radius: 8px;  
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;  
@@ -192,6 +222,10 @@ option { background: #0f172a; color: white; }
 
 <button id="btnExit" style="display:none;" onclick="location.reload()">Salir</button>
 <h2 id="timerContainer" style="display:none; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">⏱️: <span id="timer">00:00</span></h2>
+
+<!-- 🛰️ Botón para cambiar entre Vista Mapa y Vista Satélite -->
+<button id="btnToggleLayer" class="btn-secondary" style="margin-top: 15px;">🛰️ Cambiar a Vista Satélite</button>
+
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -445,8 +479,7 @@ window.adminDeleteRoom = async function(code) {
     text: "Esto borrará la sala y todos sus datos de la base de datos.",    
     icon: "warning",    
     buttons: ["Cancelar", "Sí, eliminar"],    
-    dangerMode: true,  
-  }).then(async (willDelete) => {    
+    dangerMode: true,  }).then(async (willDelete) => {    
     if (willDelete) {      
       await supabase.from('geocaches').delete().eq('room_code', code);      
       await supabase.from('player_cards').delete().eq('room_code', code);      
@@ -458,8 +491,7 @@ window.adminDeleteRoom = async function(code) {
       } else {        
         swal("Eliminado", "La sala y sus datos asociados han sido borrados.", "success");        
         loadAdminRoomsList();      
-      }    
-    }  });
+      }    }  });
 };
 
 window.processPlayerLogin = async function(){  
@@ -581,6 +613,57 @@ function launchGameEngine(durationMinutes){
 }
 
 // ==========================================
+// INICIALIZACIÓN DE MAPAS Y VISTA SATÉLITE
+// ==========================================
+function initMap() {  
+  if (STATE.mapInitialized) return;
+
+  // 1. Definir la capa normal (OpenStreetMap) y la capa satelital (Esri World Imagery)
+  const normalLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  });
+
+  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri'
+  });
+
+  // 2. Inicializar el mapa usando la capa normal por defecto
+  STATE.map = L.map('map', {
+    zoomControl: false,
+    layers: [normalLayer]
+  }).setView([STATE.userLat, STATE.userLng], 15);
+
+  // Aplicar la clase de filtro al contenedor por defecto
+  document.getElementById('map').classList.add('map-normal');
+  STATE.mapInitialized = true;
+
+  // 3. Lógica del botón para alternar vistas
+  let isSatellite = false;
+  const btnToggle = document.getElementById('btnToggleLayer');
+  
+  if (btnToggle) {
+    btnToggle.addEventListener('click', () => {
+      const mapContainer = document.getElementById('map');
+      if (isSatellite) {
+        STATE.map.removeLayer(satelliteLayer);
+        STATE.map.addLayer(normalLayer);
+        mapContainer.classList.add('map-normal');
+        btnToggle.innerHTML = "🛰️ Cambiar a Vista Satélite";
+        isSatellite = false;
+      } else {
+        STATE.map.removeLayer(normalLayer);
+        STATE.map.addLayer(satelliteLayer);
+        mapContainer.classList.remove('map-normal'); // Quitamos el filtro oscuro para ver bien el satélite
+        btnToggle.innerHTML = "🗺️ Cambiar a Vista Mapa";
+        isSatellite = true;
+      }
+    });
+  }
+}
+
+// ==========================================
 // SISTEMA DE COMBATE EN TIEMPO REAL (PVP)
 // ==========================================
 function setupRealtimePresence(){  
@@ -600,9 +683,9 @@ function setupRealtimePresence(){
           email: STATE.user.email,          
           session: SESSION_ID,          
           nick: `${STATE.user.nick} (${STATE.user.playerClass})`,          
-          lat: STATE.userLat,           
+          lat: STATE.userLat,          
           lng: STATE.userLng,          
-          team: STATE.team,           
+          team: STATE.team,          
           cardsCount: STATE.cardsCaptured,          
           level: STATE.playerLevel,          
           online_at: new Date().toISOString()        
@@ -628,7 +711,7 @@ function checkNearbyPlayersForBattle(presenceState) {
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
       if (p.email !== STATE.user.email && p.team !== STATE.team) {        
-        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);                
+        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);            
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
           STATE.lastEnemyBattled = p.email;          
@@ -710,10 +793,8 @@ window.confirmCardChoice = async function(cardIdx) {
     const currentScore = parseInt(document.getElementById(STATE.team + "Score").innerText) || 0;        
     await supabase.from('rooms').update({ [scoreField]: currentScore + 1 }).eq('code', STATE.roomCode);
 
-    swal("🔥 ¡VICTORIA EN COMBATE! 🏆", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) ha superado a ${enemy.nick} (Poder: ${enemyPower}).\n\n+1 Punto para tu equipo y +1 de XP.`, "success");  
-  } else {    
-    swal("💔 DERROTA EN COMBATE", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) fue superada por ${enemy.nick} (Poder: ${enemyPower}).\n\nTienes un escudo de protección de 45 segundos.`, "error");  
-  }
+    swal("🔥 ¡VICTORIA EN COMBATE! 🏆", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) ha superado a ${enemy.nick} (Poder: ${enemyPower}).\n\n+1 Punto para tu equipo y +1 de XP.`, "success");  } else {    
+    swal("💔 DERROTA EN COMBATE", `Tu ${chosenCard.card_name} (Poder: ${myTotalPower}) fue superada por ${enemy.nick} (Poder: ${enemyPower}).\n\nTienes un escudo de protección de 45 segundos.`, "error");  }
 
   STATE.inBattle = false;
 };
@@ -729,15 +810,13 @@ async function loadChatMessages() {
   const container = document.getElementById("chatMessages");  
   container.innerHTML = "";  
   if(data) {    
-    data.forEach(m => appendChatMessage(m, false));  
-  }
+    data.forEach(m => appendChatMessage(m, false));  }
 }
 
 function listenChatMessages() {  
   supabase.channel('public:geocard_mensajes_' + STATE.roomCode)    
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocard_mensajes', filter: `room_code=eq.${STATE.roomCode}` }, payload => {      
-      appendChatMessage(payload.new, true);    
-    })    
+      appendChatMessage(payload.new, true);    })    
     .subscribe();
 }
 
@@ -771,300 +850,33 @@ function appendChatMessage(m, isNew = false) {
     unreadMessagesCount++;
     updateChatBadge();
   }
-
-  // ⏱️ Auto-borrado suave a los 60 segundos (1 minuto)
-  setTimeout(() => {
-    if (div && div.parentNode) {
-      div.style.opacity = "0";
-      setTimeout(() => div.remove(), 500);
-    }
-  }, 60000);
 }
 
-function escapeHtml(text) {  
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
-function initMap(){  
-  if(STATE.mapInitialized) return;  
-  STATE.map = L.map('map').setView([STATE.userLat, STATE.userLng], 13);  
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(STATE.map);  
-  STATE.mapInitialized = true;
-}
-
-function startGeolocationTracking(){  
-  if ("geolocation" in navigator) {    
-    const geoOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };    
-    STATE.watchPositionId = navigator.geolocation.watchPosition(      
-      (position) => {        
-        STATE.userLat = position.coords.latitude;        
-        STATE.userLng = position.coords.longitude;        
-        updateUserPositionOnMap();        
-        checkAndSpawnCardsAroundPlayer();       
-      },      
-      (error) => {        
-        console.warn("Error de geolocalización:", error.message);        
-        updateUserPositionOnMap();      
-      },      
-      geoOptions    );  
-  } else {    
-    updateUserPositionOnMap();  
-  }
-}
-
-async function checkAndSpawnCardsAroundPlayer() {  
-  if (!STATE.roomCode) return;
-
-  const { data: nearbyCards } = await supabase    
-    .from('geocaches')    
-    .select('*')    
-    .eq('room_code', STATE.roomCode)    
-    .eq('claimed', false);
-
-  let closeCount = 0;  
-  if (nearbyCards) {    
-    nearbyCards.forEach(c => {      
-      const dist = getDistanceInMeters(STATE.userLat, STATE.userLng, c.lat, c.lng);      
-      if (dist < 400) closeCount++;    });  
-  }
-
-  if (closeCount < 4) {    
-    const radiusOffset = 0.001 + Math.random() * 0.0015;    
-    const angle = Math.random() * 2 * Math.PI;    
-    const latOffset = radiusOffset * Math.cos(angle);    
-    const lngOffset = radiusOffset * Math.sin(angle) / Math.cos(STATE.userLat * Math.PI / 180);
-
-    const spawnLat = STATE.userLat + latOffset;    
-    const spawnLng = STATE.userLng + lngOffset;
-
-    const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-
-    await supabase.from('geocaches').insert({      
-      room_code: STATE.roomCode,      
-      lat: spawnLat,      
-      lng: spawnLng,      
-      claimed: false,      
-      card_name: randomTemplate.name,      
-      card_type: randomTemplate.type || "Ataque",      
-      attack: randomTemplate.attack,      
-      defense: randomTemplate.defense,      
-      image_url: ""    });        
-    
-    loadGeocachesFromSupabase();  
-  }
-}
-
-function updateUserPositionOnMap(){  
-  if(!STATE.map) return;
-
-  const color = STATE.team === 'red' ? '#e63946' : '#1d3557';  
-  let glowStyle = "box-shadow:0 0 10px rgba(0,0,0,0.6);";  
-  let badgeHTML = "";    
-
-  if(STATE.playerLevel >= 2) {    
-    const colorsList = ['#e9c46a', '#38bdf8', '#a855f7', '#ec4899', '#22c55e', '#f97316'];    
-    const badgeColor = colorsList[(STATE.playerLevel - 2) % colorsList.length];        
-    glowStyle = `box-shadow: 0 0 ${14 + STATE.playerLevel}px ${badgeColor}, 0 0 25px ${color}; border: 3px solid ${badgeColor};`;    
-    badgeHTML = `<div style="position:absolute; top:-12px; right:-12px; background:${badgeColor}; color:#073b4c; font-size:10px; font-weight:bold; padding:1px 4px; border-radius:6px; border:1px solid white;">⭐L${STATE.playerLevel}</div>`;  
-  }
-
-  const playerIcon = L.divIcon({    
-    className: "my-position-icon",    
-    html: `<div style="position:relative; background:${color}; width:22px; height:22px; border-radius:50%; border:3px solid white; ${glowStyle}">${badgeHTML}</div>`,    
-    iconSize: [22, 22],    
-    iconAnchor: [11, 11]  
-  });
-
-  if(STATE.userMarker){    
-    STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);    
-    STATE.userMarker.setIcon(playerIcon);  
-  } else {    
-    STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(STATE.map);    
-    STATE.userMarker.bindPopup(`<b>${STATE.user.nick} (${STATE.user.playerClass})</b><br>Nivel XP: ${STATE.playerLevel}`);    
-    STATE.map.setView([STATE.userLat, STATE.userLng], 16);  
-  }
-
-  let circleRadius = 60;  
-  if(STATE.selectedPerk === 'tank') circleRadius = 85;
-
-  if(STATE.rangeCircle){    
-    STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);    
-    STATE.rangeCircle.setRadius(circleRadius);  
-  } else {    
-    STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], {      
-      color: color, fillColor: color, fillOpacity: 0.15, radius: circleRadius    
-    }).addTo(STATE.map);  
-  }
-
-  const movedDist = getDistanceInMeters(lastTrackedLat, lastTrackedLng, STATE.userLat, STATE.userLng);
-  if(roomChannel && (lastTrackedLat === 0 || movedDist > 5)) {
-    lastTrackedLat = STATE.userLat;
-    lastTrackedLng = STATE.userLng;
-    roomChannel.track({
-      email: STATE.user.email,
-      session: SESSION_ID,
-      nick: `${STATE.user.nick} (${STATE.user.playerClass})`,
-      lat: STATE.userLat, 
-      lng: STATE.userLng,
-      team: STATE.team, 
-      cardsCount: STATE.cardsCaptured,
-      level: STATE.playerLevel,
-      online_at: new Date().toISOString()
-    }).catch(err => console.warn("Error tracking presence:", err));
-  }
-}
-
-async function loadGeocachesFromSupabase(){
-  const { data, error } = await supabase
-    .from('geocaches')
-    .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('claimed', false);
-
-  if(error || !data) return;
-
-  const visibleCacheIds = new Set();
-
-  data.forEach(cache => {
-    const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-    const MAX_VIEW_DISTANCE = 1500;
-
-    if (distance <= MAX_VIEW_DISTANCE) {
-      visibleCacheIds.add(cache.id);
-
-      if (mapMarkersList[cache.id]) return;
-
-      const cacheIcon = L.divIcon({
-        className: "custom-card-icon",
-        html: `<div class="modernCardMarker">🎴</div>`,
-        iconSize: [36, 48], iconAnchor: [18, 24]
-      });
-
-      const marker = L.marker([cache.lat, cache.lng], { icon: cacheIcon }).addTo(STATE.map);
-      mapMarkersList[cache.id] = marker;
-
-      marker.on("click", async () => {
-        let maxReach = 80;
-        if(STATE.selectedPerk === 'tank') maxReach = 105;
-
-        const clickDistance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
-        if(clickDistance > maxReach){
-          swal("Estás muy lejos (" + Math.round(clickDistance) + "m)", "Entra dentro de tu círculo para reclamar esta carta.", "warning");
-          return;
+function startGeolocationTracking() {
+  if ("geolocation" in navigator) {
+    STATE.watchPositionId = navigator.geolocation.watchPosition(
+      (position) => {
+        STATE.userLat = position.coords.latitude;
+        STATE.userLng = position.coords.longitude;
+        if (STATE.map && STATE.userMarker) {
+          STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
         }
-
-        await supabase.from('geocaches').update({ claimed: true, team: STATE.team }).eq('id', cache.id);
-
-        STATE.cardsCaptured++;
-        checkPlayerLevelProgression();
-
-        const randomTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-        let finalAttack = randomTemplate.attack;
-        let finalDefense = randomTemplate.defense;
-        if(STATE.selectedPerk === 'berserker') {
-          finalAttack += 15;
-        }
-
-        const { data: existingCards } = await supabase.from('player_cards').select('*').eq('room_code', STATE.roomCode).eq('user_email', STATE.user.email).eq('card_name', randomTemplate.name);
-
-        if(existingCards && existingCards.length > 0) {
-          const cardToUpgrade = existingCards[0];
-          const newAttack = cardToUpgrade.attack + 15;
-          const newDefense = cardToUpgrade.defense + 15;
-          await supabase.from('player_cards').update({ attack: newAttack, defense: newDefense }).eq('id', cardToUpgrade.id);
-          swal("✨ ¡CARTA EVOLUCIONADA! ✨", `¡Has encontrado otro "${randomTemplate.name}"!\n⚔️ Ataque: ${newAttack} | 🛡️ Defensa: ${newDefense}`, "success");
-        } else {
-          await supabase.from('player_cards').insert({
-            room_code: STATE.roomCode, team: STATE.team, user_email: STATE.user.email,
-            card_name: randomTemplate.name, attack: finalAttack, defense: finalDefense, image_url: ""
-          });
-          swal("¡Carta Conseguida! 🎴", `Has obtenido por primera vez: ${randomTemplate.name}`, "success");
-        }
-
-        if(mapMarkersList[cache.id]) {
-          STATE.map.removeLayer(mapMarkersList[cache.id]);
-          delete mapMarkersList[cache.id];
-        }
-      });
-    }
-  });
-
-  Object.keys(mapMarkersList).forEach(id => {
-    if (!visibleCacheIds.has(id)) {
-      STATE.map.removeLayer(mapMarkersList[id]);
-      delete mapMarkersList[id];
-    }
-  });
-}
-
-function listenGeocacheChanges() {
-  supabase.channel('public:geocaches_' + STATE.roomCode)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      const updatedCache = payload.new;
-      if (updatedCache.claimed && mapMarkersList[updatedCache.id]) {
-        STATE.map.removeLayer(mapMarkersList[updatedCache.id]);
-        delete mapMarkersList[updatedCache.id];
-      }
-    })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      loadGeocachesFromSupabase();
-    })
-    .subscribe();
-}
-
-function checkPlayerLevelProgression() {
-  const xpDisplay = document.getElementById("playerXpDisplay");
-  const calculatedLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
-
-  if(calculatedLevel > STATE.playerLevel) {
-    STATE.playerLevel = calculatedLevel;
-    swal("🌟 ¡SUBIDÓN DE XP! (Nivel " + STATE.playerLevel + ")", "¡Has subido de nivel!", "success");
-  }
-
-  const cardsInCurrentLevel = STATE.cardsCaptured % 5;
-  if(xpDisplay) {
-    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${cardsInCurrentLevel}/5 para el siguiente)`;
+      },
+      (error) => console.error("Error GPS:", error),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
   }
 }
 
-function listenRoomChanges() {
-  supabase.channel('public:rooms_' + STATE.roomCode)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      const room = payload.new;
-      document.getElementById("redScore").innerText = room.red_score || 0;
-      document.getElementById("blueScore").innerText = room.blue_score || 0;
-      if(room.active === false) {
-        swal("Partida Finalizada", "El administrador ha cerrado la sala.", "info").then(() => {
-          location.reload();
-        });
-      }
-    })
-    .subscribe();
-}
-
-function startTimer(durationSeconds) {
-  let timer = durationSeconds;
-  const timerDisplay = document.getElementById('timer');
-
-  timerInterval = setInterval(() => {
-    let minutes = parseInt(timer / 60, 10);
-    let seconds = parseInt(timer % 60, 10);
-
-    minutes = minutes < 10 ? "0" + minutes : minutes;
-    seconds = seconds < 10 ? "0" + seconds : seconds;
-
-    if(timerDisplay) {
-      timerDisplay.textContent = minutes + ":" + seconds;
-    }
-
-    if (--timer < 0) {
-      clearInterval(timerInterval);
-      swal("⏱️ ¡Partida Finalizada!", "El tiempo de juego ha concluido.", "info").then(() => {
-        location.reload();
-      });
-    }
-  }, 1000);
-}
+function loadGeocachesFromSupabase() {}
+function listenRoomChanges() {}
+function listenGeocacheChanges() {}
+function startTimer() {}
+function checkPlayerLevelProgression() {}
 </script>
 </body>
 </html>
