@@ -234,10 +234,28 @@ const DEFAULT_STARTER_CARD = {
   card_type: "Básica"
 };
 
+const CARD_POOL = [  
+  { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },  
+  { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },  
+  { name: "Garza Real", attack: 60, defense: 60, type: "Especial" },  
+  { name: "Flamenco de Fangar", attack: 75, defense: 50, type: "Ataque" },  
+  { name: "Cangrejo Azul", attack: 80, defense: 70, type: "Ataque" },  
+  { name: "Anguila del Delta", attack: 65, defense: 45, type: "Especial" },  
+  { name: "Guardián de la Laguna", attack: 30, defense: 95, type: "Defensa" },  
+  { name: "Viento de Garbí", attack: 70, defense: 30, type: "Ataque" },  
+  { name: "Esparvaró del Delta", attack: 90, defense: 35, type: "Ataque" },  
+  { name: "Tortuga de Mar", attack: 40, defense: 100, type: "Defensa" },  
+  { name: "Zorrino de Marjal", attack: 50, defense: 50, type: "Especial" },  
+  { name: "Toro Bravo del Ebro", attack: 95, defense: 60, type: "Ataque" },  
+  { name: "Musclera Tradicional", attack: 15, defense: 110, type: "Defensa" }
+];
+
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
 let mapMarkersList = {};
+let lastTrackedLat = 0;
+let lastTrackedLng = 0;
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {  
   const R = 6371000;  
@@ -384,6 +402,7 @@ async function loadAdminRoomsList() {
   container.innerHTML = html;
 }
 
+// 🚀 CREAR SALA Y GENERAR CARTAS AUTOMÁTICAMENTE ALREDEDOR DEL ADMIN
 window.createNewRoom = async function() {  
   const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();  
   const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
@@ -400,10 +419,31 @@ window.createNewRoom = async function() {
     blue_score: 0  }, { onConflict: 'code' });
 
   if(error) {    
-    swal("Error", "No se pudo crear la sala en la base de datos", "error");  } else {    
-    swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido creada correctamente.`, "success");    
-    document.getElementById("adminRoomCodeInput").value = "";    
-    loadAdminRoomsList();  }
+    swal("Error", "No se pudo crear la sala en la base de datos", "error");    
+    return;
+  }
+
+  // Generación automática de cartas iniciales
+  for (let i = 0; i < 5; i++) {
+    const randomCard = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+    const randomLat = STATE.userLat + (Math.random() - 0.5) * 0.01;
+    const randomLng = STATE.userLng + (Math.random() - 0.5) * 0.01;
+
+    await supabase.from('geocaches').insert({
+      room_code: code,
+      lat: randomLat,
+      lng: randomLng,
+      claimed: false,
+      card_name: randomCard.name,
+      card_type: randomCard.type,
+      attack: randomCard.attack,
+      defense: randomCard.defense
+    });
+  }
+
+  swal("¡Sala Lista! 🎉", `La sala "${code}" ha sido creada con cartas automáticas.`, "success");    
+  document.getElementById("adminRoomCodeInput").value = "";    
+  loadAdminRoomsList();
 };
 
 window.adminEnterRoom = function(code, duration) {  
@@ -583,14 +623,14 @@ function launchGameEngine(durationMinutes){
 }
 
 // ==========================================
-// CARGAR Y PINTAR CARTAS (GEOCACHES ADAPTADO A 'claimed')
+// CARGAR Y PINTAR CARTAS (ADAPTADO A 'claimed')
 // ==========================================
 async function loadGeocachesFromSupabase() {
   const { data: caches, error } = await supabase
     .from('geocaches')
     .select('*')
     .eq('room_code', STATE.roomCode)
-    .eq('claimed', false); // Adaptado a tu columna 'claimed' del SQL
+    .eq('claimed', false);
 
   if (error) {
     console.error("Error cargando cartas del mapa:", error);
@@ -629,7 +669,6 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
-  // Marcar como reclamada en la base de datos usando 'claimed'
   const { error } = await supabase
     .from('geocaches')
     .update({ claimed: true })
@@ -645,7 +684,6 @@ async function attemptCollectGeocache(cache) {
     delete mapMarkersList[cache.id];
   }
 
-  // Guardar en el inventario del jugador
   await supabase.from('player_cards').insert({
     room_code: STATE.roomCode,
     user_email: STATE.user.email,
