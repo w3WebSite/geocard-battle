@@ -194,8 +194,12 @@ option { background: #0f172a; color: white; }
 .player-avatar-icon:hover {
   transform: scale(1.2);
 }
-.team-red-border { border-color: #e63946 !important; }
-.team-blue-border { border-color: #38bdf8 !important; }
+.ranking-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; margin: 6px 0; border-radius: 10px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  font-size: 13px;
+}
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
@@ -203,6 +207,7 @@ option { background: #0f172a; color: white; }
 
 <div id="mapControlsContainer">
   <button id="mapToggleBtn" class="map-ui-btn" onclick="toggleMapStyle()">🗺️ Satélite</button>
+  <button id="rankingBtn" class="map-ui-btn" onclick="showRankingModal()">🏆 Top 5 Ranking</button>
   <button id="removePingBtn" class="map-ui-btn map-ui-btn-danger" onclick="removeTacticalPing()">🗑️ Borrar Ping</button>
 </div>
 
@@ -212,7 +217,7 @@ option { background: #0f172a; color: white; }
 <button id="btnExit" onclick="location.reload()">Salir 🚪</button>
 
 <div id="panel">  
-  <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>  
+  <div style="font-size: 14px; margin-bottom: 4px;">🏆 Victorias: <span id="winsDisplay" style="color:#e9c46a;">0</span></div>  
   <div style="font-size: 13px; margin: 4px 0;">👥 En línea: <span id="onlineCount">1</span></div>  
   <div style="font-size: 12px; margin: 2px 0; color:#38bdf8;">⭐ XP / Nivel: <span id="playerXpDisplay">Nivel 1 (0/5)</span></div>  
   <button id="btnInventory" style="padding:6px 10px; font-size:12px;">🎴 Ver Mis Cartas</button>
@@ -228,7 +233,7 @@ option { background: #0f172a; color: white; }
 <div id="chatModal">
   <div id="chatModalContent">
     <div id="chatHeaderModal">
-      <span>💬 Chat de Partida (Auto 1m)</span>
+      <span>💬 Chat General (Auto 1m)</span>
       <button onclick="closeChatModal()" style="background:none; border:none; color:white; font-size:16px; cursor:pointer; padding:0; margin:0; box-shadow:none;">✕</button>
     </div>
     <div id="chatMessages"></div>
@@ -258,7 +263,6 @@ let isChatModalOpen = false;
 const STATE = {  
   user: { email: "", nick: "", playerClass: "", avatarUrl: "" },  
   roomCode: null,  
-  team: null,  
   isAdmin: false,  
   map: null,  
   mapInitialized: false,  
@@ -271,6 +275,7 @@ const STATE = {
   rangeCircle: null,  
   watchPositionId: null,  
   cardsCaptured: 0,  
+  victories: 0,
   playerLevel: 1,  
   lastBattleTime: 0,  
   lastEnemyBattled: null,  
@@ -306,6 +311,7 @@ let tacticalPings = {};
 let roomChannel = null;
 let timerInterval = null;
 let mapMarkersList = {};
+let currentPresenceState = {};
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {  
   const R = 6371000;  
@@ -376,11 +382,7 @@ function showLoginScreen(){
         <option value="⚡ Explorador">⚡ Explorador (Agilidad)</option>        
         <option value="🔮 Mago Táctico">🔮 Mago Táctico (Especial)</option>      
       </select><br>      
-      <input id="playerRoomCode" placeholder="Código de Sala"><br>      
-      <select id="playerTeamSelect">        
-        <option value="red">Equipo Rojo 🔴</option>        
-        <option value="blue">Equipo Azul 🔵</option>      
-      </select><br><br>      
+      <input id="playerRoomCode" placeholder="Código de Sala"><br><br>      
       <button onclick="window.processPlayerLogin()" style="width:90%;">Entrar al Juego 🚀</button><br>      
       <div style="display:flex; justify-content:center; gap:10px; margin-top:5px;">        
         <button onclick="window.showHowToPlay()" class="btn-secondary" style="width:43%;">❓ ¿Cómo Jugar?</button>        
@@ -396,12 +398,12 @@ window.showHowToPlay = function(){
   helpModal.id = "helpModal";  
   helpModal.innerHTML = `    
     <div>      
-      <h2>📜 Guía de Combate Avanzado</h2>      
+      <h2>📜 Guía de Combate Individual</h2>      
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">        
-        <p><b>1. 👁️ Jugadores en el Mapa:</b> Verás a todos los jugadores en tiempo real. Haz clic sobre su foto para inspeccionar sus atributos.</p>
-        <p><b>2. ⚔️ Duelos de 3 Turnos:</b> Las batallas PvP constan de 3 rondas. Elige sabiamente tus cartas.</p>
-        <p><b>3. ⭐ Evolución de Cartas:</b> Si capturas una carta duplicada, subirá de evolución potenciando sus atributos.</p>
-        <p><b>4. 📍 Pines Tácticos:</b> Marca puntos en el mapa para tu equipo.</p>      
+        <p><b>1. 👁️ Jugadores en Vivo:</b> Verás a todos los contrincantes en tiempo real. Toca su foto para ver sus victorias y nivel.</p>
+        <p><b>2. 🏆 Top 5 Ranking:</b> Consulta quién lidera la sala en victorias ganadas.</p>
+        <p><b>3. ⚔️ Duelos a 3 Turnos:</b> Desafía a rivales a menos de 15m. ¡Elige tus mejores cartas para ganar la ronda!</p>
+        <p><b>4. ⭐ Evolución de Cartas:</b> Si recoges la misma carta duplicada, sube de nivel y aumenta sus atributos.</p>      
       </div><br>      
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>    
     </div>  `;  
@@ -468,9 +470,8 @@ window.createNewRoom = async function() {
   const { error } = await supabase.from('rooms').upsert({    
     code: code,    
     active: true,    
-    duration: duration,    
-    red_score: 0,    
-    blue_score: 0  }, { onConflict: 'code' });
+    duration: duration
+  }, { onConflict: 'code' });
 
   if(error) {    
     swal("Error", "No se pudo crear la sala en la base de datos", "error");    
@@ -506,7 +507,6 @@ window.adminEnterRoom = function(code, duration) {
   STATE.user.avatarUrl = "";
   STATE.user.email = `admin_player_${code}@game.com`;  
   STATE.roomCode = code;  
-  STATE.team = "red";
 
   document.getElementById("adminModal").remove();  
   launchGameEngine(duration);
@@ -531,12 +531,38 @@ window.adminDeleteRoom = async function(code) {
         loadAdminRoomsList();      }    }  });
 };
 
+// Redimensionar imagen Base64 para optimizar sincronización en tiempo real
+function compressImage(file, maxWidth = 120, maxHeight = 120) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
+        } else {
+          if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 window.processPlayerLogin = async function(){  
   const nickInput = document.getElementById("loginNick").value.trim();  
   const fileInput = document.getElementById("loginAvatarFile");
   const playerClass = document.getElementById("playerClassSelect").value;  
   const roomCodeInput = document.getElementById("playerRoomCode").value.trim().toUpperCase();  
-  const team = document.getElementById("playerTeamSelect").value;
 
   if(!nickInput){ swal("Error", "Debes ingresar un Nick para jugar", "warning"); return; }
 
@@ -554,11 +580,7 @@ window.processPlayerLogin = async function(){
 
   let avatarBase64 = "";
   if (fileInput.files && fileInput.files[0]) {
-    avatarBase64 = await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.readAsDataURL(fileInput.files[0]);
-    });
+    avatarBase64 = await compressImage(fileInput.files[0]);
   }
 
   const { data: roomData, error } = await supabase    
@@ -578,7 +600,6 @@ window.processPlayerLogin = async function(){
   STATE.user.avatarUrl = avatarBase64 || "https://api.iconify.design/twemoji:video-game.svg";
   STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${roomCodeInput}@game.com`;  
   STATE.roomCode = roomCodeInput;  
-  STATE.team = team;
 
   const { count, error: countErr } = await supabase    
     .from('player_cards')    
@@ -591,9 +612,6 @@ window.processPlayerLogin = async function(){
     STATE.playerLevel = Math.floor(count / 5) + 1;  } else {    
     STATE.cardsCaptured = 0;    
     STATE.playerLevel = 1;  }
-
-  document.getElementById("redScore").innerText = roomData.red_score || 0;  
-  document.getElementById("blueScore").innerText = roomData.blue_score || 0;
 
   document.getElementById("loginModal").remove();  
   launchGameEngine(roomData.duration || 30);
@@ -690,17 +708,16 @@ async function placeTacticalPing(lat, lng) {
   await supabase.from('geocard_mensajes').insert({
     room_code: STATE.roomCode,
     nick: STATE.user.nick,
-    team: STATE.team,
-    message: `🎯 [PING TÁCTICO] Reunirse en coordenadas`
+    message: `🎯 [MARCADOR] ${STATE.user.nick} ha marcado una posición`
   });
 
-  if (tacticalPings[STATE.team]) {
-    STATE.map.removeLayer(tacticalPings[STATE.team]);
+  if (tacticalPings['user']) {
+    STATE.map.removeLayer(tacticalPings['user']);
   }
 
   const pingIcon = L.divIcon({
     className: 'custom-ping',
-    html: `<div style="background:${STATE.team === 'red' ? '#e63946' : '#38bdf8'}; color:white; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:11px; border:2px solid white; box-shadow:0 0 10px rgba(0,0,0,0.8); cursor:pointer;">📍 Ping de ${STATE.user.nick}</div>`,
+    html: `<div style="background:#2a9d8f; color:white; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:11px; border:2px solid #e9c46a; box-shadow:0 0 10px rgba(0,0,0,0.8); cursor:pointer;">📍 Marcador de ${STATE.user.nick}</div>`,
     iconSize: [120, 30],
     iconAnchor: [60, 15]
   });
@@ -712,17 +729,17 @@ async function placeTacticalPing(lat, lng) {
     window.removeTacticalPing();
   });
 
-  tacticalPings[STATE.team] = marker;
+  tacticalPings['user'] = marker;
   document.getElementById("removePingBtn").style.display = "inline-block";
-  swal("¡Ping Táctico Colocado! 🎯", "Tus compañeros han recibido la señal.", "success");
+  swal("¡Marcador Colocado! 🎯", "Posición señalada en el mapa.", "success");
 }
 
 window.removeTacticalPing = function() {
-  if (tacticalPings[STATE.team]) {
-    STATE.map.removeLayer(tacticalPings[STATE.team]);
-    delete tacticalPings[STATE.team];
+  if (tacticalPings['user']) {
+    STATE.map.removeLayer(tacticalPings['user']);
+    delete tacticalPings['user'];
     document.getElementById("removePingBtn").style.display = "none";
-    swal("Ping eliminado 🗑️", "Has borrado el marcador táctico del mapa.", "info");
+    swal("Marcador eliminado 🗑️", "Has borrado la marca del mapa.", "info");
   }
 };
 
@@ -736,7 +753,6 @@ function launchGameEngine(durationMinutes){
   setupRealtimePresence();  
   startGeolocationTracking();  
   loadGeocachesFromSupabase();  
-  listenRoomChanges();  
   listenGeocacheChanges();  
   loadChatMessages();  
   listenChatMessages();  
@@ -812,7 +828,6 @@ async function attemptCollectGeocache(cache) {
     await supabase.from('player_cards').insert({
       room_code: STATE.roomCode,
       user_email: STATE.user.email,
-      team: STATE.team,
       card_name: cache.card_name,
       attack: cache.attack,
       defense: cache.defense,
@@ -836,17 +851,6 @@ function listenGeocacheChanges() {
       if (payload.new.claimed && mapMarkersList[payload.new.id]) {
         STATE.map.removeLayer(mapMarkersList[payload.new.id]);
         delete mapMarkersList[payload.new.id];
-      }
-    })
-    .subscribe();
-}
-
-function listenRoomChanges() {
-  supabase.channel('public:rooms_' + STATE.roomCode)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
-      if (payload.new) {
-        document.getElementById("redScore").innerText = payload.new.red_score || 0;
-        document.getElementById("blueScore").innerText = payload.new.blue_score || 0;
       }
     })
     .subscribe();
@@ -879,7 +883,7 @@ function checkPlayerLevelProgression() {
   }
 }
 
-// 👥 CONTROL DE PRESENCIA Y MOSTRAR JUGADORES EN EL MAPA
+// 👥 CONTROL DE PRESENCIA Y RENDERIZADO GLOBAL DE JUGADORES
 function setupRealtimePresence(){  
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
     config: { presence: { key: STATE.user.email } }  
@@ -887,10 +891,11 @@ function setupRealtimePresence(){
 
   roomChannel    
     .on('presence', { event: 'sync' }, () => {      
-      const state = roomChannel.presenceState();      
-      updateOnlinePlayersCount(state);      
-      renderAllPlayersOnMap(state);
-      checkNearbyPlayersForBattle(state);    })    
+      currentPresenceState = roomChannel.presenceState();      
+      updateOnlinePlayersCount(currentPresenceState);      
+      renderAllPlayersOnMap(currentPresenceState);
+      checkNearbyPlayersForBattle(currentPresenceState);
+    })    
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
         await roomChannel.track({          
@@ -901,10 +906,13 @@ function setupRealtimePresence(){
           avatar: STATE.user.avatarUrl,
           lat: STATE.userLat,             
           lng: STATE.userLng,          
-          team: STATE.team,            
+          victories: STATE.victories,
           cardsCount: STATE.cardsCaptured,          
           level: STATE.playerLevel,          
-          online_at: new Date().toISOString()        });      }    });
+          online_at: new Date().toISOString()
+        });      
+      }    
+    });
 }
 
 function updateOnlinePlayersCount(state) {  
@@ -913,28 +921,27 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 DIBUJAR A TODOS LOS JUGADORES Y GESTIONAR CLICS EN SUS AVATARES
+// 👥 DIBUJAR JUGADORES EN EL MAPA EN TIEMPO REAL
 function renderAllPlayersOnMap(presenceState) {
-  const currentEmails = [];
+  const activeEmails = [];
 
-  Object.keys(presenceState).forEach(clientId => {
-    const presences = presenceState[clientId];
+  Object.keys(presenceState).forEach(key => {
+    const presences = presenceState[key];
     presences.forEach(p => {
-      currentEmails.push(p.email);
+      activeEmails.push(p.email);
 
-      // Si es el usuario actual, no dibujamos duplicado (ya tiene STATE.userMarker)
+      // Si es la propia marca del jugador local, se actualiza en su función GPS principal
       if (p.email === STATE.user.email) return;
 
-      const borderClass = p.team === 'red' ? 'team-red-border' : 'team-blue-border';
       const avatarStyle = p.avatar 
         ? `background-image: url('${p.avatar}');` 
-        : `background: ${p.team === 'red' ? '#e63946' : '#38bdf8'}; display:flex; justify-content:center; align-items:center; font-size:18px;`;
+        : `background: #2a9d8f; display:flex; justify-content:center; align-items:center; font-size:18px;`;
 
-      const avatarContent = p.avatar ? '' : (p.team === 'red' ? '🔴' : '🔵');
+      const avatarContent = p.avatar ? '' : '👤';
 
       const customPlayerIcon = L.divIcon({
         className: 'custom-player-avatar',
-        html: `<div class="player-avatar-icon ${borderClass}" style="${avatarStyle}">${avatarContent}</div>`,
+        html: `<div class="player-avatar-icon" style="${avatarStyle}">${avatarContent}</div>`,
         iconSize: [44, 44],
         iconAnchor: [22, 22]
       });
@@ -956,28 +963,76 @@ function renderAllPlayersOnMap(presenceState) {
     });
   });
 
-  // Limpiar marcadores de jugadores desconectados
+  // Limpiar marcadores de usuarios desconectados
   Object.keys(playerMarkers).forEach(email => {
-    if (!currentEmails.includes(email)) {
+    if (!activeEmails.includes(email)) {
       STATE.map.removeLayer(playerMarkers[email]);
       delete playerMarkers[email];
     }
   });
 }
 
-// 🔍 MODAL EXPANDIDO DE ATRIBUTOS DEL JUGADOR
+// 🏆 RANKING TOP 5 DE VICTORIAS
+window.showRankingModal = function() {
+  let allPlayers = [];
+  
+  Object.keys(currentPresenceState).forEach(key => {
+    currentPresenceState[key].forEach(p => {
+      allPlayers.push({
+        nick: p.nick,
+        victories: p.victories || 0,
+        level: p.level || 1,
+        avatar: p.avatar
+      });
+    });
+  });
+
+  // Ordenar de mayor a menor número de victorias
+  allPlayers.sort((a, b) => b.victories - a.victories);
+  const top5 = allPlayers.slice(0, 5);
+
+  let html = "";
+  if (top5.length > 0) {
+    top5.forEach((p, idx) => {
+      let medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`;
+      html += `
+        <div class="ranking-item">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px; font-weight:bold; width:25px;">${medal}</span>
+            <b>${p.nick}</b> <span style="font-size:11px; color:#cbd5e1;">(Niv. ${p.level})</span>
+          </div>
+          <span style="color:#e9c46a; font-weight:bold;">🏆 ${p.victories} Vic.</span>
+        </div>
+      `;
+    });
+  } else {
+    html = "<p style='color:#94a3b8; font-size:13px;'>Aún no hay jugadores compitiendo.</p>";
+  }
+
+  const rankingModal = document.createElement("div");
+  rankingModal.className = "modal";
+  rankingModal.id = "rankingModal";
+  rankingModal.innerHTML = `
+    <div>
+      <h2>🏆 Top 5 Ranking de Jugadores</h2>
+      <p style="font-size:12px; color:#38bdf8; margin-bottom:10px;">Líderes con más batallas ganadas en la sala:</p>
+      <div>${html}</div><br>
+      <button onclick="document.getElementById('rankingModal').remove()">Cerrar ✖️</button>
+    </div>
+  `;
+  document.body.appendChild(rankingModal);
+};
+
+// 🔍 MODAL EXPANDIDO DE FICHA DE JUGADORES EN EL MAPA
 function showPlayerProfileModal(p) {
   const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);
-  const teamName = p.team === 'red' ? 'Equipo Rojo 🔴' : 'Equipo Azul 🔵';
   const avatarImg = p.avatar 
     ? `<img src="${p.avatar}" style="width:100px; height:100px; border-radius:50%; border:3px solid #e9c46a; object-fit:cover; margin-bottom:10px; box-shadow:0 0 15px rgba(0,0,0,0.8);">` 
     : `<div style="width:80px; height:80px; border-radius:50%; background:#2a9d8f; display:inline-flex; justify-content:center; align-items:center; font-size:35px; border:3px solid #e9c46a; margin-bottom:10px;">👤</div>`;
 
   let attackBonus = (p.playerClass || '').includes("Guerrero") ? "+15 ATK" : "Normal";
   let defenseBonus = (p.playerClass || '').includes("Guardián") ? "+15 DEF" : "Normal";
-
-  const isEnemy = p.team !== STATE.team;
-  const canChallenge = isEnemy && distance <= 15;
+  const canChallenge = distance <= 15;
 
   const profileModal = document.createElement("div");
   profileModal.className = "modal";
@@ -986,16 +1041,17 @@ function showPlayerProfileModal(p) {
     <div>
       ${avatarImg}
       <h2 style="margin:5px 0;">${p.nick}</h2>
-      <p style="font-size:13px; color:#e9c46a; margin-bottom:12px;"><b>${p.playerClass || 'Aventurero'}</b> | ${teamName}</p>
+      <p style="font-size:13px; color:#e9c46a; margin-bottom:12px;"><b>${p.playerClass || 'Aventurero'}</b></p>
       
       <div style="background:rgba(255,255,255,0.06); padding:12px; border-radius:12px; text-align:left; font-size:13px; line-height:1.6; border:1px solid rgba(255,255,255,0.1); margin-bottom:15px;">
+        <p style="margin:2px 0;">🏆 <b>Victorias Ganadas:</b> ${p.victories || 0}</p>
         <p style="margin:2px 0;">⭐ <b>Nivel de Jugador:</b> Nivel ${p.level || 1}</p>
         <p style="margin:2px 0;">🎴 <b>Cartas Capturadas:</b> ${p.cardsCount || 0}</p>
         <p style="margin:2px 0;">⚔️ <b>Bonus de Clase:</b> ${attackBonus} / ${defenseBonus}</p>
         <p style="margin:2px 0;">📍 <b>Distancia actual:</b> a ${Math.round(distance)} metros</p>
       </div>
 
-      ${canChallenge ? `<button onclick="window.challengeFromModal('${p.email}')" style="background:linear-gradient(45deg,#e63946,#d62828); width:100%; margin-bottom:10px;">⚔️ ¡Desafiar a Duelo Táctico!</button>` : ''}
+      ${canChallenge ? `<button onclick="window.challengeFromModal('${p.email}')" style="background:linear-gradient(45deg,#e63946,#d62828); width:100%; margin-bottom:10px;">⚔️ ¡Desafiar a Duelo Táctico!</button>` : `<p style="font-size:11px; color:#f4a261;">Acércate a menos de 15m para desafiarlo.</p>`}
       <button onclick="document.getElementById('playerProfileModal').remove()" style="width:100%; background:linear-gradient(45deg,#457b9d,#1d3557);">Cerrar ✖️</button>
     </div>
   `;
@@ -1020,7 +1076,7 @@ function checkNearbyPlayersForBattle(presenceState) {
   Object.keys(presenceState).forEach(clientId => {    
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
-      if (p.email !== STATE.user.email && p.team !== STATE.team) {        
+      if (p.email !== STATE.user.email) {        
         const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);                
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
@@ -1120,13 +1176,27 @@ async function endBattleSession(bs) {
   STATE.inBattle = false;
 
   if (bs.myWins > bs.enemyWins) {
-    STATE.cardsCaptured++;
-    checkPlayerLevelProgression();
-    const scoreField = STATE.team === 'red' ? 'red_score' : 'blue_score';    
-    const currentScore = parseInt(document.getElementById(STATE.team + "Score").innerText) || 0;        
-    await supabase.from('rooms').update({ [scoreField]: currentScore + 1 }).eq('code', STATE.roomCode);
+    STATE.victories++;
+    document.getElementById("winsDisplay").innerText = STATE.victories;
 
-    swal("🏆 ¡VICTORIA GENERAL DEL DUELO! 🎉", `Has ganado ${bs.myWins} de 3 rondas contra ${bs.enemy.nick}.\n\n+1 Punto para tu equipo y +1 XP.`, "success");
+    // Actualizar presencia con la nueva victoria
+    if (roomChannel) {
+      roomChannel.track({
+        email: STATE.user.email,
+        session: SESSION_ID,
+        nick: STATE.user.nick,
+        playerClass: STATE.user.playerClass,
+        avatar: STATE.user.avatarUrl,
+        lat: STATE.userLat,
+        lng: STATE.userLng,
+        victories: STATE.victories,
+        cardsCount: STATE.cardsCaptured,
+        level: STATE.playerLevel,
+        online_at: new Date().toISOString()
+      });
+    }
+
+    swal("🏆 ¡VICTORIA GENERAL DEL DUELO! 🎉", `Has ganado ${bs.myWins} de 3 rondas contra ${bs.enemy.nick}.\n\n+1 Victoria agregada a tu Ranking.`, "success");
   } else {
     swal("💀 DERROTA EN EL DUELO", `${bs.enemy.nick} se ha llevado la victoria (${bs.enemyWins} a ${bs.myWins}). ¡Entrena mejor tus cartas!`, "error");
   }
@@ -1165,7 +1235,6 @@ async function sendChatMessage() {
   await supabase.from('geocard_mensajes').insert({    
     room_code: STATE.roomCode,    
     nick: STATE.user.nick,    
-    team: STATE.team,    
     message: text  });
 
   input.value = "";
@@ -1178,12 +1247,11 @@ function escapeHtml(text) {
 
 function appendChatMessage(m, isNew = false) {  
   const container = document.getElementById("chatMessages");  
-  const teamColor = m.team === 'red' ? '#e63946' : '#38bdf8';  
   
   const div = document.createElement("div");  
   div.style.marginBottom = "4px";  
   div.style.transition = "opacity 0.5s ease";  
-  div.innerHTML = `<b style="color:${teamColor};">${m.nick}:</b> ${escapeHtml(m.message)}`;  
+  div.innerHTML = `<b style="color:#38bdf8;">${m.nick}:</b> ${escapeHtml(m.message)}`;  
   
   container.appendChild(div);  
   container.scrollTop = container.scrollHeight;
@@ -1207,8 +1275,8 @@ function startGeolocationTracking() {
         STATE.userLng = position.coords.longitude;
         
         const avatarHtml = STATE.user.avatarUrl 
-          ? `<div class="player-avatar-icon ${STATE.team === 'red' ? 'team-red-border' : 'team-blue-border'}" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
-          : `<div class="player-avatar-icon ${STATE.team === 'red' ? 'team-red-border' : 'team-blue-border'}" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
+          ? `<div class="player-avatar-icon" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
+          : `<div class="player-avatar-icon" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
 
         const userCustomIcon = L.divIcon({
           className: 'custom-user-icon',
@@ -1226,7 +1294,7 @@ function startGeolocationTracking() {
           STATE.map.setView([STATE.userLat, STATE.userLng], 16);
         }
 
-        // Actualizar la posición propia en la presencia Realtime
+        // Emitir posición actualizada a todos en tiempo real
         if (roomChannel) {
           roomChannel.track({
             email: STATE.user.email,
@@ -1236,7 +1304,7 @@ function startGeolocationTracking() {
             avatar: STATE.user.avatarUrl,
             lat: STATE.userLat,
             lng: STATE.userLng,
-            team: STATE.team,
+            victories: STATE.victories,
             cardsCount: STATE.cardsCaptured,
             level: STATE.playerLevel,
             online_at: new Date().toISOString()
