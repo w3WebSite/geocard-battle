@@ -550,17 +550,15 @@ async function showPlayerInventory() {
   document.body.appendChild(invModal);
 }
 
-// 🗺️ Inicialización del mapa con selector de Satélite y OpenStreetMap libre
+// 🗺️ Inicialización del mapa con selector de Satélite y Modo Estándar Libre
 function initMap() {
   if (STATE.mapInitialized) return;
 
-  // Capa 1: Mapa Estándar (Libre de API Key)
   const standardTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   });
 
-  // Capa 2: Vista de Satélite (Esri World Imagery)
   const satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
@@ -572,7 +570,6 @@ function initMap() {
     layers: [standardTileLayer]
   });
 
-  // Selector de capas arriba a la derecha
   const baseLayers = {
     "🗺️ Mapa Estándar": standardTileLayer,
     "🛰️ Vista Satélite": satelliteTileLayer
@@ -608,8 +605,7 @@ async function loadGeocachesFromSupabase() {
   const { data: caches, error } = await supabase
     .from('geocaches')
     .select('*')
-    .eq('room_code', STATE.roomCode)
-    .eq('collected', false);
+    .eq('room_code', STATE.roomCode);
 
   if (error) {
     console.error("Error cargando cartas del mapa:", error);
@@ -648,10 +644,9 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
-  // Marcar como recogida en la BD
   const { error } = await supabase
     .from('geocaches')
-    .update({ collected: true })
+    .delete()
     .eq('id', cache.id);
 
   if (error) {
@@ -659,13 +654,11 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
-  // Eliminar marcador del mapa
   if (mapMarkersList[cache.id]) {
     STATE.map.removeLayer(mapMarkersList[cache.id]);
     delete mapMarkersList[cache.id];
   }
 
-  // Asignar carta aleatoria al inventario del usuario
   const randomCardTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
   
   await supabase.from('player_cards').insert({
@@ -688,10 +681,10 @@ function listenGeocacheChanges() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
       renderGeocacheMarker(payload.new);
     })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      if (payload.new.collected && mapMarkersList[payload.new.id]) {
-        STATE.map.removeLayer(mapMarkersList[payload.new.id]);
-        delete mapMarkersList[payload.new.id];
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      if (mapMarkersList[payload.old.id]) {
+        STATE.map.removeLayer(mapMarkersList[payload.old.id]);
+        delete mapMarkersList[payload.old.id];
       }
     })
     .subscribe();
