@@ -234,6 +234,22 @@ const DEFAULT_STARTER_CARD = {
   type: "Básica"
 };
 
+const CARD_POOL = [  
+  { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },  
+  { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },  
+  { name: "Garza Real", attack: 60, defense: 60, type: "Especial" },  
+  { name: "Flamenco de Fangar", attack: 75, defense: 50, type: "Ataque" },  
+  { name: "Cangrejo Azul", attack: 80, defense: 70, type: "Ataque" },  
+  { name: "Anguila del Delta", attack: 65, defense: 45, type: "Especial" },  
+  { name: "Guardián de la Laguna", attack: 30, defense: 95, type: "Defensa" },  
+  { name: "Viento de Garbí", attack: 70, defense: 30, type: "Ataque" },  
+  { name: "Esparvaró del Delta", attack: 90, defense: 35, type: "Ataque" },  
+  { name: "Tortuga de Mar", attack: 40, defense: 100, type: "Defensa" },  
+  { name: "Zorrino de Marjal", attack: 50, defense: 50, type: "Especial" },  
+  { name: "Toro Bravo del Ebro", attack: 95, defense: 60, type: "Ataque" },  
+  { name: "Musclera Tradicional", attack: 15, defense: 110, type: "Defensa" }
+];
+
 let playerMarkers = {};
 let roomChannel = null;
 let timerInterval = null;
@@ -534,12 +550,12 @@ async function showPlayerInventory() {
   document.body.appendChild(invModal);
 }
 
-// 🗺️ Inicialización del mapa con selector de Satélite y Modo Oscuro
+// 🗺️ Inicialización del mapa con selector de Satélite y OpenStreetMap libre
 function initMap() {
   if (STATE.mapInitialized) return;
 
-  // Capa 1: Modo Mapa Estándar (Libre y sin API Key)
-  const darkTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Capa 1: Mapa Estándar (Libre de API Key)
+  const standardTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   });
@@ -553,12 +569,12 @@ function initMap() {
   STATE.map = L.map('map', {
     center: [STATE.userLat, STATE.userLng],
     zoom: 16,
-    layers: [darkTileLayer]
+    layers: [standardTileLayer]
   });
 
   // Selector de capas arriba a la derecha
   const baseLayers = {
-    "🗺️ Modo Juego (Oscuro)": darkTileLayer,
+    "🗺️ Mapa Estándar": standardTileLayer,
     "🛰️ Vista Satélite": satelliteTileLayer
   };
 
@@ -583,6 +599,144 @@ function launchGameEngine(durationMinutes){
   listenChatMessages();  
   startTimer(durationMinutes * 60);  
   checkPlayerLevelProgression();
+}
+
+// ==========================================
+// CARGAR Y PINTAR CARTAS (GEOCACHES)
+// ==========================================
+async function loadGeocachesFromSupabase() {
+  const { data: caches, error } = await supabase
+    .from('geocaches')
+    .select('*')
+    .eq('room_code', STATE.roomCode)
+    .eq('collected', false);
+
+  if (error) {
+    console.error("Error cargando cartas del mapa:", error);
+    return;
+  }
+
+  if (caches) {
+    caches.forEach(cache => renderGeocacheMarker(cache));
+  }
+}
+
+function renderGeocacheMarker(cache) {
+  if (mapMarkersList[cache.id]) return;
+
+  const customIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div class="modernCardMarker">🎴</div>`,
+    iconSize: [36, 48],
+    iconAnchor: [18, 48]
+  });
+
+  const marker = L.marker([cache.lat, cache.lng], { icon: customIcon }).addTo(STATE.map);
+
+  marker.on('click', () => {
+    attemptCollectGeocache(cache);
+  });
+
+  mapMarkersList[cache.id] = marker;
+}
+
+async function attemptCollectGeocache(cache) {
+  const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
+
+  if (distance > 30) {
+    swal("Demasiado lejos 🏃", `Estás a ${Math.round(distance)} metros de esta carta. Acércate a menos de 30 metros para recogerla.`, "warning");
+    return;
+  }
+
+  // Marcar como recogida en la BD
+  const { error } = await supabase
+    .from('geocaches')
+    .update({ collected: true })
+    .eq('id', cache.id);
+
+  if (error) {
+    swal("Error", "No se pudo reclamar la carta", "error");
+    return;
+  }
+
+  // Eliminar marcador del mapa
+  if (mapMarkersList[cache.id]) {
+    STATE.map.removeLayer(mapMarkersList[cache.id]);
+    delete mapMarkersList[cache.id];
+  }
+
+  // Asignar carta aleatoria al inventario del usuario
+  const randomCardTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+  
+  await supabase.from('player_cards').insert({
+    room_code: STATE.roomCode,
+    user_email: STATE.user.email,
+    card_name: randomCardTemplate.name,
+    attack: randomCardTemplate.attack,
+    defense: randomCardTemplate.defense,
+    type: randomCardTemplate.type
+  });
+
+  STATE.cardsCaptured++;
+  checkPlayerLevelProgression();
+
+  swal("¡Carta Capturada! 🎴🎉", `Has conseguido: ${randomCardTemplate.name}\n⚔️ ATK: ${randomCardTemplate.attack} | 🛡️ DEF: ${randomCardTemplate.defense}`, "success");
+}
+
+function listenGeocacheChanges() {
+  supabase.channel('public:geocaches_' + STATE.roomCode)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      renderGeocacheMarker(payload.new);
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      if (payload.new.collected && mapMarkersList[payload.new.id]) {
+        STATE.map.removeLayer(mapMarkersList[payload.new.id]);
+        delete mapMarkersList[payload.new.id];
+      }
+    })
+    .subscribe();
+}
+
+function listenRoomChanges() {
+  supabase.channel('public:rooms_' + STATE.roomCode)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${STATE.roomCode}` }, payload => {
+      if (payload.new) {
+        document.getElementById("redScore").innerText = payload.new.red_score || 0;
+        document.getElementById("blueScore").innerText = payload.new.blue_score || 0;
+      }
+    })
+    .subscribe();
+}
+
+function startTimer(durationInSeconds) {
+  let timer = durationInSeconds;
+  const display = document.getElementById('timer');
+  
+  if (timerInterval) clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+    let minutes = parseInt(timer / 60, 10);
+    let seconds = parseInt(timer % 60, 10);
+
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    if(display) display.textContent = minutes + ":" + seconds;
+
+    if (--timer < 0) {
+      clearInterval(timerInterval);
+      swal("¡Partida Finalizada! 🏁", "El tiempo de la sala ha terminado.", "info");
+    }
+  }, 1000);
+}
+
+function checkPlayerLevelProgression() {
+  STATE.playerLevel = Math.floor(STATE.cardsCaptured / 5) + 1;
+  let currentXpInLevel = STATE.cardsCaptured % 5;
+  const xpDisplay = document.getElementById("playerXpDisplay");
+  if(xpDisplay) {
+    xpDisplay.innerText = `Nivel ${STATE.playerLevel} (${currentXpInLevel}/5)`;
+  }
 }
 
 // ==========================================
@@ -790,12 +944,6 @@ function startGeolocationTracking() {
     );
   }
 }
-
-function loadGeocachesFromSupabase() {}
-function listenRoomChanges() {}
-function listenGeocacheChanges() {}
-function startTimer(seconds) {}
-function checkPlayerLevelProgression() {}
 </script>
 </body>
 </html>
