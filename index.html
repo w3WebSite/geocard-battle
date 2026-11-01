@@ -59,6 +59,16 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
+/* 🗺️ Botón Lúdico de Cambio de Mapa (Estilo RPG) */
+#mapToggleBtn {
+  position: fixed; top: 20px; left: 20px; z-index: 600;
+  background: linear-gradient(135deg, #1d3557, #457b9d);
+  border: 2px solid #e9c46a; color: white; padding: 8px 14px;
+  border-radius: 20px; font-weight: bold; font-size: 13px; cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: none; transition: transform 0.2s;
+}
+#mapToggleBtn:hover { transform: scale(1.08); }
+
 /* 💬 Botón Flotante de Chat */
 #chatFloatingBtn {
   position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
@@ -156,10 +166,16 @@ option { background: #0f172a; color: white; }
   display: flex; justify-content: space-between; align-items: center; font-size: 13px;  
   border: 1px solid rgba(255,255,255,0.08);
 }
+.player-avatar-icon {
+  width: 40px; height: 40px; border-radius: 50%; border: 2px solid #e9c46a;
+  background-size: cover; background-position: center; box-shadow: 0 0 10px rgba(0,0,0,0.7);
+}
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
 <body>
+
+<button id="mapToggleBtn" onclick="toggleMapStyle()">🗺️ Ver Satélite</button>
 
 <div id="panel">  
   <div>🌱 <span id="redScore">0</span> | 🌊 <span id="blueScore">0</span></div>  
@@ -178,7 +194,7 @@ option { background: #0f172a; color: white; }
 <div id="chatModal">
   <div id="chatModalContent">
     <div id="chatHeaderModal">
-      <span>💬 Chat de Partida</span>
+      <span>💬 Chat de Partida (Auto-destrucción 1m)</span>
       <button onclick="closeChatModal()" style="background:none; border:none; color:white; font-size:16px; cursor:pointer; padding:0; margin:0; box-shadow:none;">✕</button>
     </div>
     <div id="chatMessages"></div>
@@ -208,12 +224,15 @@ let unreadMessagesCount = 0;
 let isChatModalOpen = false;
 
 const STATE = {  
-  user: { email: "", nick: "", playerClass: "" },  
+  user: { email: "", nick: "", playerClass: "", avatarUrl: "" },  
   roomCode: null,  
   team: null,  
   isAdmin: false,  
   map: null,  
   mapInitialized: false,  
+  isSatellite: false,
+  standardLayer: null,
+  satelliteLayer: null,
   userLat: 40.7164,  
   userLng: 0.7365,  
   userMarker: null,  
@@ -221,7 +240,6 @@ const STATE = {
   watchPositionId: null,  
   cardsCaptured: 0,  
   playerLevel: 1,  
-  selectedPerk: null,  
   lastBattleTime: 0,  
   lastEnemyBattled: null,  
   inBattle: false
@@ -251,11 +269,10 @@ const CARD_POOL = [
 ];
 
 let playerMarkers = {};
+let tacticalPings = {};
 let roomChannel = null;
 let timerInterval = null;
 let mapMarkersList = {};
-let lastTrackedLat = 0;
-let lastTrackedLng = 0;
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {  
   const R = 6371000;  
@@ -281,7 +298,6 @@ window.addEventListener('pagehide', () => {
   }
 });
 
-// 💬 Funciones para el modal de chat
 window.openChatModal = function() {
   isChatModalOpen = true;
   document.getElementById("chatModal").style.display = "flex";
@@ -313,8 +329,9 @@ function showLoginScreen(){
   modalDiv.innerHTML = `    
     <div>      
       <h2>🎴 GeoCard Battle Global</h2>      
-      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Introduce tu Nick y Sala:</b></p>      
+      <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Configura tu perfil de combate:</b></p>      
       <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)"><br>      
+      <input id="loginAvatar" placeholder="URL de tu Foto/Avatar (Opcional)"><br>
       <select id="playerClassSelect">        
         <option value="⚔️ Guerrero">⚔️ Guerrero (+15 ATK)</option>        
         <option value="🛡️ Guardián">🛡️ Guardián (+15 DEF)</option>        
@@ -341,12 +358,12 @@ window.showHowToPlay = function(){
   helpModal.id = "helpModal";  
   helpModal.innerHTML = `    
     <div>      
-      <h2>📜 Guía Global de Supervivencia</h2>      
+      <h2>📜 Guía Táctica y Novedades</h2>      
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">        
-        <p><b>1. 🌍 Sin Fronteras:</b> Juega desde cualquier lugar del mundo usando tu ubicación GPS real.</p>        
-        <p><b>2. ⭐ Sistema de XP y Niveles:</b> Cada 5 cartas subes de nivel y ejecutas habilidades mejoradas.</p>        
-        <p><b>3. 🚶 Movimiento Dinámico:</b> Las cartas aparecen automáticamente a tu alrededor a medida que te desplazas.</p>        
-        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a jugadores del equipo contrario a menos de 15 metros. Elige tu mejor carta para luchar o huye a salvo.</p>      
+        <p><b>1. 📍 Pines Tácticos:</b> Haz clic en cualquier parte del mapa para marcar un punto de reunión visible para tu equipo.</p>
+        <p><b>2. 💬 Chat Auto-destructible:</b> Los mensajes del chat desaparecen automáticamente tras 1 minuto.</p>
+        <p><b>3. 🖼️ Avatar Personalizado:</b> Tu foto de perfil flotará sobre tu posición en el mapa.</p>
+        <p><b>4. ⚔️ Combate por Proximidad:</b> Acércate a menos de 15m de un rival para batallar.</p>      
       </div><br>      
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>    
     </div>  `;  
@@ -402,7 +419,6 @@ async function loadAdminRoomsList() {
   container.innerHTML = html;
 }
 
-// 🚀 CREAR SALA Y GENERAR CARTAS AUTOMÁTICAMENTE ALREDEDOR DEL ADMIN
 window.createNewRoom = async function() {  
   const code = document.getElementById("adminRoomCodeInput").value.trim().toUpperCase();  
   const duration = parseInt(document.getElementById("adminDurationInput").value) || 30;
@@ -423,7 +439,6 @@ window.createNewRoom = async function() {
     return;
   }
 
-  // Generación automática de cartas iniciales
   for (let i = 0; i < 5; i++) {
     const randomCard = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
     const randomLat = STATE.userLat + (Math.random() - 0.5) * 0.01;
@@ -450,6 +465,7 @@ window.adminEnterRoom = function(code, duration) {
   STATE.isAdmin = false;  
   STATE.user.nick = "AdminJugador";  
   STATE.user.playerClass = "⚔️ Guerrero";  
+  STATE.user.avatarUrl = "";
   STATE.user.email = `admin_player_${code}@game.com`;  
   STATE.roomCode = code;  
   STATE.team = "red";
@@ -479,6 +495,7 @@ window.adminDeleteRoom = async function(code) {
 
 window.processPlayerLogin = async function(){  
   const nickInput = document.getElementById("loginNick").value.trim();  
+  const avatarInput = document.getElementById("loginAvatar").value.trim();
   const playerClass = document.getElementById("playerClassSelect").value;  
   const roomCodeInput = document.getElementById("playerRoomCode").value.trim().toUpperCase();  
   const team = document.getElementById("playerTeamSelect").value;
@@ -511,6 +528,7 @@ window.processPlayerLogin = async function(){
   STATE.isAdmin = false;  
   STATE.user.nick = nickInput;  
   STATE.user.playerClass = playerClass;  
+  STATE.user.avatarUrl = avatarInput || "https://api.iconify.design/twemoji:video-game.svg";
   STATE.user.email = `${nickInput.toLowerCase().replace(/\s+/g, '_')}_${roomCodeInput}@game.com`;  
   STATE.roomCode = roomCodeInput;  
   STATE.team = team;
@@ -574,34 +592,75 @@ async function showPlayerInventory() {
   document.body.appendChild(invModal);
 }
 
-// 🗺️ Inicialización del mapa con selector de Satélite y Mapa Estándar
+// 🗺️ Inicialización del mapa con Botón Táctico de Cambio de Vista
 function initMap() {
   if (STATE.mapInitialized) return;
 
-  const standardTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  STATE.standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   });
 
-  const satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  STATE.satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    attribution: 'Tiles &copy; Esri'
   });
 
   STATE.map = L.map('map', {
     center: [STATE.userLat, STATE.userLng],
     zoom: 16,
-    layers: [standardTileLayer]
+    layers: [STATE.standardLayer],
+    zoomControl: false
   });
 
-  const baseLayers = {
-    "🗺️ Mapa Estándar": standardTileLayer,
-    "🛰️ Vista Satélite": satelliteTileLayer
-  };
+  L.control.zoom({ position: 'bottomright' }).addTo(STATE.map);
 
-  L.control.layers(baseLayers, null, { position: 'topright' }).addTo(STATE.map);
+  // Permitir colocar un Ping Táctico haciendo clic en el mapa
+  STATE.map.on('click', (e) => {
+    placeTacticalPing(e.latlng.lat, e.latlng.lng);
+  });
 
   STATE.mapInitialized = true;
+  document.getElementById("mapToggleBtn").style.display = "block";
+}
+
+window.toggleMapStyle = function() {
+  const btn = document.getElementById("mapToggleBtn");
+  if (STATE.isSatellite) {
+    STATE.map.removeLayer(STATE.satelliteLayer);
+    STATE.map.addLayer(STATE.standardLayer);
+    STATE.isSatellite = false;
+    btn.innerHTML = "🗺️ Ver Satélite";
+  } else {
+    STATE.map.removeLayer(STATE.standardLayer);
+    STATE.map.addLayer(STATE.satelliteLayer);
+    STATE.isSatellite = true;
+    btn.innerHTML = "📍 Ver Estándar";
+  }
+};
+
+// 📍 Sistema de Pines Tácticos de Equipo
+async function placeTacticalPing(lat, lng) {
+  await supabase.from('geocard_mensajes').insert({
+    room_code: STATE.roomCode,
+    nick: STATE.user.nick,
+    team: STATE.team,
+    message: `🎯 [PING TÁCTICO] Reunirse en coordenadas`
+  });
+
+  if (tacticalPings[STATE.team]) {
+    STATE.map.removeLayer(tacticalPings[STATE.team]);
+  }
+
+  const pingIcon = L.divIcon({
+    className: 'custom-ping',
+    html: `<div style="background:${STATE.team === 'red' ? '#e63946' : '#38bdf8'}; color:white; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:11px; border:2px solid white; box-shadow:0 0 10px rgba(0,0,0,0.8);">📍 Ping de ${STATE.user.nick}</div>`,
+    iconSize: [120, 30],
+    iconAnchor: [60, 15]
+  });
+
+  tacticalPings[STATE.team] = L.marker([lat, lng], { icon: pingIcon }).addTo(STATE.map);
+  swal("¡Ping Táctico Colocado! 🎯", "Tus compañeros de equipo han recibido la señal en el mapa.", "success");
 }
 
 function launchGameEngine(durationMinutes){  
@@ -622,9 +681,6 @@ function launchGameEngine(durationMinutes){
   checkPlayerLevelProgression();
 }
 
-// ==========================================
-// CARGAR Y PINTAR CARTAS (ADAPTADO A 'claimed')
-// ==========================================
 async function loadGeocachesFromSupabase() {
   const { data: caches, error } = await supabase
     .from('geocaches')
@@ -756,9 +812,6 @@ function checkPlayerLevelProgression() {
   }
 }
 
-// ==========================================
-// SISTEMA DE COMBATE EN TIEMPO REAL (PVP)
-// ==========================================
 function setupRealtimePresence(){  
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
     config: { presence: { key: STATE.user.email } }  
@@ -775,6 +828,7 @@ function setupRealtimePresence(){
           email: STATE.user.email,          
           session: SESSION_ID,          
           nick: `${STATE.user.nick} (${STATE.user.playerClass})`,          
+          avatar: STATE.user.avatarUrl,
           lat: STATE.userLat,             
           lng: STATE.userLng,          
           team: STATE.team,            
@@ -893,7 +947,14 @@ async function loadChatMessages() {
   const container = document.getElementById("chatMessages");  
   container.innerHTML = "";  
   if(data) {    
-    data.forEach(m => appendChatMessage(m, false));  }
+    data.forEach(m => {
+      // Filtrar mensajes más antiguos de 1 minuto
+      const msgTime = new Date(m.created_at).getTime();
+      if (Date.now() - msgTime < 60000) {
+        appendChatMessage(m, false);
+      }
+    });  
+  }
 }
 
 function listenChatMessages() {  
@@ -938,6 +999,12 @@ function appendChatMessage(m, isNew = false) {
     unreadMessagesCount++;
     updateChatBadge();
   }
+
+  // Auto-eliminación visual y lógica a los 60 segundos exactos
+  setTimeout(() => {
+    div.style.opacity = '0';
+    setTimeout(() => div.remove(), 500);
+  }, 60000);
 }
 
 function startGeolocationTracking() {
@@ -947,11 +1014,22 @@ function startGeolocationTracking() {
         STATE.userLat = position.coords.latitude;
         STATE.userLng = position.coords.longitude;
         
+        const avatarHtml = STATE.user.avatarUrl 
+          ? `<div class="player-avatar-icon" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
+          : `<div class="player-avatar-icon" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
+
+        const userCustomIcon = L.divIcon({
+          className: 'custom-user-icon',
+          html: avatarHtml,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+
         if (STATE.map && STATE.userMarker) {
           STATE.userMarker.setLatLng([STATE.userLat, STATE.userLng]);
           if (STATE.rangeCircle) STATE.rangeCircle.setLatLng([STATE.userLat, STATE.userLng]);
         } else if (STATE.map) {
-          STATE.userMarker = L.marker([STATE.userLat, STATE.userLng]).addTo(STATE.map).bindPopup("¡Estás aquí!");
+          STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: userCustomIcon }).addTo(STATE.map).bindPopup("¡Estás aquí!");
           STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], { radius: 15, color: '#2a9d8f', fillColor: '#2a9d8f', fillOpacity: 0.15 }).addTo(STATE.map);
           STATE.map.setView([STATE.userLat, STATE.userLng], 16);
         }
