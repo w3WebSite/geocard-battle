@@ -12,7 +12,7 @@ body{
   font-family: 'Trebuchet MS', Arial, sans-serif;  
   color:white;  
   background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)),                
-              url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");  
+            url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");  
   background-size: cover;  
   background-position: center;  
   background-attachment: fixed;
@@ -259,6 +259,19 @@ const SESSION_ID = Math.random().toString(36).substring(2, 9);
 
 let unreadMessagesCount = 0;
 let isChatModalOpen = false;
+
+// 🎵 Efectos de sonido opcionales
+const SOUNDS = {
+  capture: new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'),
+  victory: new Audio('https://assets.mixkit.co/active_storage/sfx/2700/2700-preview.mp3'),
+  defeat: new Audio('https://assets.mixkit.co/active_storage/sfx/2658/2658-preview.mp3')
+};
+function playSound(type) {
+  if (SOUNDS[type]) {
+    SOUNDS[type].currentTime = 0;
+    SOUNDS[type].play().catch(e => {});
+  }
+}
 
 const STATE = {  
   user: { email: "", nick: "", playerClass: "", avatarUrl: "" },  
@@ -531,7 +544,6 @@ window.adminDeleteRoom = async function(code) {
         loadAdminRoomsList();      }    }  });
 };
 
-// Redimensionar imagen Base64 para optimizar sincronización en tiempo real
 function compressImage(file, maxWidth = 120, maxHeight = 120) {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -658,7 +670,6 @@ async function showPlayerInventory() {
   document.body.appendChild(invModal);
 }
 
-// 🗺️ Inicialización del mapa
 function initMap() {
   if (STATE.mapInitialized) return;
 
@@ -813,6 +824,8 @@ async function attemptCollectGeocache(cache) {
     .eq('user_email', STATE.user.email)
     .eq('card_name', cache.card_name);
 
+  playSound('capture');
+
   if (existingCards && existingCards.length > 0) {
     const cardToUpgrade = existingCards[0];
     const newEvolution = (cardToUpgrade.evolution || 1) + 1;
@@ -883,7 +896,6 @@ function checkPlayerLevelProgression() {
   }
 }
 
-// 👥 CONTROL DE PRESENCIA Y RENDERIZADO GLOBAL DE JUGADORES
 function setupRealtimePresence(){  
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
     config: { presence: { key: STATE.user.email } }  
@@ -904,15 +916,14 @@ function setupRealtimePresence(){
           nick: STATE.user.nick,
           playerClass: STATE.user.playerClass,
           avatar: STATE.user.avatarUrl,
-          lat: STATE.userLat,             
+          lat: STATE.userLat,            
           lng: STATE.userLng,          
           victories: STATE.victories,
           cardsCount: STATE.cardsCaptured,          
           level: STATE.playerLevel,          
           online_at: new Date().toISOString()
         });      
-      }    
-    });
+      }    });
 }
 
 function updateOnlinePlayersCount(state) {  
@@ -921,7 +932,6 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 DIBUJAR JUGADORES EN EL MAPA EN TIEMPO REAL
 function renderAllPlayersOnMap(presenceState) {
   const activeEmails = [];
 
@@ -930,7 +940,6 @@ function renderAllPlayersOnMap(presenceState) {
     presences.forEach(p => {
       activeEmails.push(p.email);
 
-      // Si es la propia marca del jugador local, se actualiza en su función GPS principal
       if (p.email === STATE.user.email) return;
 
       const avatarStyle = p.avatar 
@@ -963,7 +972,6 @@ function renderAllPlayersOnMap(presenceState) {
     });
   });
 
-  // Limpiar marcadores de usuarios desconectados
   Object.keys(playerMarkers).forEach(email => {
     if (!activeEmails.includes(email)) {
       STATE.map.removeLayer(playerMarkers[email]);
@@ -972,7 +980,6 @@ function renderAllPlayersOnMap(presenceState) {
   });
 }
 
-// 🏆 RANKING TOP 5 DE VICTORIAS
 window.showRankingModal = function() {
   let allPlayers = [];
   
@@ -987,7 +994,6 @@ window.showRankingModal = function() {
     });
   });
 
-  // Ordenar de mayor a menor número de victorias
   allPlayers.sort((a, b) => b.victories - a.victories);
   const top5 = allPlayers.slice(0, 5);
 
@@ -1023,7 +1029,6 @@ window.showRankingModal = function() {
   document.body.appendChild(rankingModal);
 };
 
-// 🔍 MODAL EXPANDIDO DE FICHA DE JUGADORES EN EL MAPA
 function showPlayerProfileModal(p) {
   const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);
   const avatarImg = p.avatar 
@@ -1077,11 +1082,11 @@ function checkNearbyPlayersForBattle(presenceState) {
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
       if (p.email !== STATE.user.email) {        
-        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);                
+        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);              
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
           STATE.lastEnemyBattled = p.email;          
-          promptBattleConsent(p);        }      }    });  });
+          promptBattleConsent(p);       }      }    });  });
 }
 
 function promptBattleConsent(enemy) {  
@@ -1097,7 +1102,6 @@ function promptBattleConsent(enemy) {
       swal("Has huido 💨", "Te has retirado de la zona.", "info");    }  });
 }
 
-// ⚔️ SISTEMA DE BATALLA TÁCTICA A 3 TURNOS
 async function startBattle3Turns(enemy) {
   STATE.inBattle = true;
 
@@ -1140,7 +1144,7 @@ async function runBattleRound(bs) {
   battleModal.innerHTML = `    
     <div>      
       <h2>⚔️ DUELO PVP - RONDA ${bs.round} / 3</h2>      
-      <p style="font-size:13px; color:#cbd5e1;">Rival: <b>${bs.enemy.nick}</b> | Tù: ${bs.myWins} - ${bs.enemyWins} :Rival</p>      
+      <p style="font-size:13px; color:#cbd5e1;">Rival: <b>${bs.enemy.nick}</b> | Tú: ${bs.myWins} - ${bs.enemyWins} :Rival</p>      
       <p style="font-size:12px; color:#e9c46a;">Elige tu carta para este turno:</p>      
       <div style="max-height:220px; overflow-y:auto;">${cardsHTML}</div>    
     </div>  `;
@@ -1177,9 +1181,9 @@ async function endBattleSession(bs) {
 
   if (bs.myWins > bs.enemyWins) {
     STATE.victories++;
+    playSound('victory');
     document.getElementById("winsDisplay").innerText = STATE.victories;
 
-    // Actualizar presencia con la nueva victoria
     if (roomChannel) {
       roomChannel.track({
         email: STATE.user.email,
@@ -1198,6 +1202,7 @@ async function endBattleSession(bs) {
 
     swal("🏆 ¡VICTORIA GENERAL DEL DUELO! 🎉", `Has ganado ${bs.myWins} de 3 rondas contra ${bs.enemy.nick}.\n\n+1 Victoria agregada a tu Ranking.`, "success");
   } else {
+    playSound('defeat');
     swal("💀 DERROTA EN EL DUELO", `${bs.enemy.nick} se ha llevado la victoria (${bs.enemyWins} a ${bs.myWins}). ¡Entrena mejor tus cartas!`, "error");
   }
 }
@@ -1216,8 +1221,7 @@ async function loadChatMessages() {
     data.forEach(m => {
       const msgTime = new Date(m.created_at).getTime();
       if (Date.now() - msgTime < 60000) appendChatMessage(m, false);
-    });  
-  }
+    });  }
 }
 
 function listenChatMessages() {  
@@ -1250,7 +1254,7 @@ function appendChatMessage(m, isNew = false) {
   
   const div = document.createElement("div");  
   div.style.marginBottom = "4px";  
-  div.style.transition = "opacity 0.5s ease";  
+  div.style.opacity = "1";
   div.innerHTML = `<b style="color:#38bdf8;">${m.nick}:</b> ${escapeHtml(m.message)}`;  
   
   container.appendChild(div);  
@@ -1294,7 +1298,6 @@ function startGeolocationTracking() {
           STATE.map.setView([STATE.userLat, STATE.userLng], 16);
         }
 
-        // Emitir posición actualizada a todos en tiempo real
         if (roomChannel) {
           roomChannel.track({
             email: STATE.user.email,
