@@ -718,7 +718,7 @@ window.toggleMapStyle = function() {
   }
 };
 
-// 🎯 MULTIJUGADOR: COLOCAR Y SINCRONIZAR MARCADOR Y LÍNEA DE RUTA
+// 🎯 MULTIJUGADOR: COLOCAR Y SINCRONIZAR MARCADOR Y RUTA
 async function placeTacticalPing(lat, lng) {
   STATE.pingLat = lat;
   STATE.pingLng = lng;
@@ -758,11 +758,11 @@ window.removeTacticalPing = function(notify = true) {
   STATE.pingLng = null;
 
   if (tacticalPings['userMarker']) {
-    STATE.map.removeLayer(tacticalPings['userMarker']);
+    try { STATE.map.removeLayer(tacticalPings['userMarker']); } catch(e){}
     delete tacticalPings['userMarker'];
   }
   if (tacticalPings['userRoute']) {
-    STATE.map.removeLayer(tacticalPings['userRoute']);
+    try { STATE.map.removeLayer(tacticalPings['userRoute']); } catch(e){}
     delete tacticalPings['userRoute'];
   }
 
@@ -946,8 +946,8 @@ function updatePresenceState() {
       victories: STATE.victories,
       cardsCount: STATE.cardsCaptured,
       level: STATE.playerLevel,
-      pingLat: STATE.pingLat,
-      pingLng: STATE.pingLng,
+      pingLat: STATE.pingLat !== undefined ? STATE.pingLat : null,
+      pingLng: STATE.pingLng !== undefined ? STATE.pingLng : null,
       online_at: new Date().toISOString()
     });
   }
@@ -959,7 +959,7 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 MOSTRAR JUGADORES Y DIBUJAR SUS RUTAS EN TIEMPO REAL (CORREGIDO)
+// 👥 MOSTRAR JUGADORES Y DIBUJAR SUS RUTAS EN TIEMPO REAL (CORREGIDO Y SEGURO)
 function renderAllPlayersOnMap(presenceState) {
   const activeEmails = [];
 
@@ -970,10 +970,12 @@ function renderAllPlayersOnMap(presenceState) {
 
       if (p.email === STATE.user.email) {
         if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
-          tacticalPings['userRoute'].setLatLngs([
-            [STATE.userLat, STATE.userLng],
-            [STATE.pingLat, STATE.pingLng]
-          ]);
+          try {
+            tacticalPings['userRoute'].setLatLngs([
+              [STATE.userLat, STATE.userLng],
+              [STATE.pingLat, STATE.pingLng]
+            ]);
+          } catch (e) {}
         }
         return;
       }
@@ -1010,7 +1012,7 @@ function renderAllPlayersOnMap(presenceState) {
       const routeKey = `route_${p.email}`;
       const markerKey = `marker_${p.email}`;
 
-      if (p.pingLat && p.pingLng) {
+      if (p.pingLat !== null && p.pingLat !== undefined && p.pingLng !== null && p.pingLng !== undefined) {
         if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
           try {
             activePlayerRoutes[routeKey].setLatLngs([
@@ -1018,30 +1020,32 @@ function renderAllPlayersOnMap(presenceState) {
               [p.pingLat, p.pingLng]
             ]);
             activePlayerRoutes[markerKey].setLatLng([p.pingLat, p.pingLng]);
-          } catch (err) {
-            console.warn("Actualizando ruta de forma segura...");
-          }
+          } catch (err) {}
         } else {
-          const targetIcon = L.divIcon({
-            className: 'custom-target-ping',
-            html: `<div style="background:#e63946; color:white; padding:3px 6px; border-radius:10px; font-weight:bold; font-size:10px; border:2px solid white; box-shadow:0 0 8px rgba(0,0,0,0.8);">🎯 Ruta de ${p.nick}</div>`,
-            iconSize: [120, 25],
-            iconAnchor: [60, 12]
-          });
+          try {
+            const targetIcon = L.divIcon({
+              className: 'custom-target-ping',
+              html: `<div style="background:#e63946; color:white; padding:3px 6px; border-radius:10px; font-weight:bold; font-size:10px; border:2px solid white; box-shadow:0 0 8px rgba(0,0,0,0.8);">🎯 Ruta de ${p.nick}</div>`,
+              iconSize: [120, 25],
+              iconAnchor: [60, 12]
+            });
 
-          const tMarker = L.marker([p.pingLat, p.pingLng], { icon: targetIcon }).addTo(STATE.map);
-          const tRoute = L.polyline([
-            [p.lat, p.lng],
-            [p.pingLat, p.pingLng]
-          ], { color: '#38bdf8', weight: 3, dashArray: '5, 5', opacity: 0.8 }).addTo(STATE.map);
+            const tMarker = L.marker([p.pingLat, p.pingLng], { icon: targetIcon }).addTo(STATE.map);
+            const tRoute = L.polyline([
+              [p.lat, p.lng],
+              [p.pingLat, p.pingLng]
+            ], { color: '#38bdf8', weight: 3, dashArray: '5, 5', opacity: 0.8 }).addTo(STATE.map);
 
-          activePlayerRoutes[markerKey] = tMarker;
-          activePlayerRoutes[routeKey] = tRoute;
+            activePlayerRoutes[markerKey] = tMarker;
+            activePlayerRoutes[routeKey] = tRoute;
+          } catch(e) {}
         }
       } else {
         if (activePlayerRoutes[routeKey]) {
-          if (activePlayerRoutes[routeKey]) STATE.map.removeLayer(activePlayerRoutes[routeKey]);
-          if (activePlayerRoutes[markerKey]) STATE.map.removeLayer(activePlayerRoutes[markerKey]);
+          try {
+            if (activePlayerRoutes[routeKey]) STATE.map.removeLayer(activePlayerRoutes[routeKey]);
+            if (activePlayerRoutes[markerKey]) STATE.map.removeLayer(activePlayerRoutes[markerKey]);
+          } catch(e) {}
           delete activePlayerRoutes[routeKey];
           delete activePlayerRoutes[markerKey];
         }
@@ -1051,12 +1055,14 @@ function renderAllPlayersOnMap(presenceState) {
 
   Object.keys(playerMarkers).forEach(email => {
     if (!activeEmails.includes(email)) {
-      STATE.map.removeLayer(playerMarkers[email]);
+      if (playerMarkers[email]) STATE.map.removeLayer(playerMarkers[email]);
       delete playerMarkers[email];
 
       if (activePlayerRoutes[`route_${email}`]) {
-        if (activePlayerRoutes[`route_${email}`]) STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
-        if (activePlayerRoutes[`marker_${email}`]) STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+        try {
+          STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+        } catch(e) {}
         delete activePlayerRoutes[`route_${email}`];
         delete activePlayerRoutes[`marker_${email}`];
       }
