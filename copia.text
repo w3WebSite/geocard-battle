@@ -208,7 +208,7 @@ option { background: #0f172a; color: white; }
 <div id="mapControlsContainer">
   <button id="mapToggleBtn" class="map-ui-btn" onclick="toggleMapStyle()">🗺️ Satélite</button>
   <button id="rankingBtn" class="map-ui-btn" onclick="showRankingModal()">🏆 Top 5 Ranking</button>
-  <button id="removePingBtn" class="map-ui-btn map-ui-btn-danger" onclick="removeTacticalPing()">🗑️ Borrar Ping</button>
+  <button id="removePingBtn" class="map-ui-btn map-ui-btn-danger" onclick="removeTacticalPing()">🗑️ Borrar Ruta</button>
 </div>
 
 <div id="topGameBar">
@@ -260,7 +260,7 @@ const SESSION_ID = Math.random().toString(36).substring(2, 9);
 let unreadMessagesCount = 0;
 let isChatModalOpen = false;
 
-// 🎵 Efectos de sonido opcionales
+// 🎵 Efectos de sonido
 const SOUNDS = {
   capture: new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'),
   victory: new Audio('https://assets.mixkit.co/active_storage/sfx/2700/2700-preview.mp3'),
@@ -292,7 +292,9 @@ const STATE = {
   playerLevel: 1,  
   lastBattleTime: 0,  
   lastEnemyBattled: null,  
-  inBattle: false
+  inBattle: false,
+  pingLat: null,
+  pingLng: null
 };
 
 const DEFAULT_STARTER_CARD = {  
@@ -321,6 +323,7 @@ const CARD_POOL = [
 
 let playerMarkers = {};
 let tacticalPings = {};
+let activePlayerRoutes = {};
 let roomChannel = null;
 let timerInterval = null;
 let mapMarkersList = {};
@@ -416,7 +419,7 @@ window.showHowToPlay = function(){
         <p><b>1. 👁️ Jugadores en Vivo:</b> Verás a todos los contrincantes en tiempo real. Toca su foto para ver sus victorias y nivel.</p>
         <p><b>2. 🏆 Top 5 Ranking:</b> Consulta quién lidera la sala en victorias ganadas.</p>
         <p><b>3. ⚔️ Duelos a 3 Turnos:</b> Desafía a rivales a menos de 15m. ¡Elige tus mejores cartas para ganar la ronda!</p>
-        <p><b>4. ⭐ Evolución de Cartas:</b> Si recoges la misma carta duplicada, sube de nivel y aumenta sus atributos.</p>      
+        <p><b>4. 🎯 Rutas Tácticas con Enlace:</b> Haz clic en el mapa para marcar una ruta. Se enviará un enlace automático al chat con las coordenadas exactas.</p>      
       </div><br>      
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>    
     </div>  `;  
@@ -715,43 +718,59 @@ window.toggleMapStyle = function() {
   }
 };
 
+// 🎯 MULTIJUGADOR: COLOCAR Y ENVIAR ENLACE DE RUTA AL CHAT
 async function placeTacticalPing(lat, lng) {
+  STATE.pingLat = lat;
+  STATE.pingLng = lng;
+
+  const mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
   await supabase.from('geocard_mensajes').insert({
     room_code: STATE.roomCode,
     nick: STATE.user.nick,
-    message: `🎯 [MARCADOR] ${STATE.user.nick} ha marcado una posición`
+    message: `🎯 [RUTA] ${STATE.user.nick} ha marcado un objetivo. <a href="${mapLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">Ver Destino 📍</a>`
   });
 
-  if (tacticalPings['user']) {
-    STATE.map.removeLayer(tacticalPings['user']);
-  }
+  removeTacticalPing(false);
 
   const pingIcon = L.divIcon({
     className: 'custom-ping',
-    html: `<div style="background:#2a9d8f; color:white; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:11px; border:2px solid #e9c46a; box-shadow:0 0 10px rgba(0,0,0,0.8); cursor:pointer;">📍 Marcador de ${STATE.user.nick}</div>`,
-    iconSize: [120, 30],
-    iconAnchor: [60, 15]
+    html: `<div style="background:#2a9d8f; color:white; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:11px; border:2px solid #e9c46a; box-shadow:0 0 10px rgba(0,0,0,0.8); cursor:pointer;">🎯 Tu Ruta (${STATE.user.nick})</div>`,
+    iconSize: [140, 30],
+    iconAnchor: [70, 15]
   });
 
   const marker = L.marker([lat, lng], { icon: pingIcon }).addTo(STATE.map);
-  
-  marker.on('click', (e) => {
-    L.DomEvent.stopPropagation(e);
-    window.removeTacticalPing();
-  });
+  const routeLine = L.polyline([
+    [STATE.userLat, STATE.userLng],
+    [lat, lng]
+  ], { color: '#e9c46a', weight: 4, dashArray: '8, 8', opacity: 0.9 }).addTo(STATE.map);
 
-  tacticalPings['user'] = marker;
+  tacticalPings['userMarker'] = marker;
+  tacticalPings['userRoute'] = routeLine;
+
   document.getElementById("removePingBtn").style.display = "inline-block";
-  swal("¡Marcador Colocado! 🎯", "Posición señalada en el mapa.", "success");
+  swal("¡Ruta Trazada! 🎯", "Posición marcada y enlace enviado al chat para tus compañeros.", "success");
+
+  updatePresenceState();
 }
 
-window.removeTacticalPing = function() {
-  if (tacticalPings['user']) {
-    STATE.map.removeLayer(tacticalPings['user']);
-    delete tacticalPings['user'];
-    document.getElementById("removePingBtn").style.display = "none";
-    swal("Marcador eliminado 🗑️", "Has borrado la marca del mapa.", "info");
+window.removeTacticalPing = function(notify = true) {
+  STATE.pingLat = null;
+  STATE.pingLng = null;
+
+  if (tacticalPings['userMarker']) {
+    try { STATE.map.removeLayer(tacticalPings['userMarker']); } catch(e){}
+    delete tacticalPings['userMarker'];
   }
+  if (tacticalPings['userRoute']) {
+    try { STATE.map.removeLayer(tacticalPings['userRoute']); } catch(e){}
+    delete tacticalPings['userRoute'];
+  }
+
+  document.getElementById("removePingBtn").style.display = "none";
+  updatePresenceState();
+
+  if (notify) swal("Ruta borrada 🗑️", "Has quitado tu marcador del mapa.", "info");
 };
 
 function launchGameEngine(durationMinutes){  
@@ -910,20 +929,29 @@ function setupRealtimePresence(){
     })    
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
-        await roomChannel.track({          
-          email: STATE.user.email,          
-          session: SESSION_ID,          
-          nick: STATE.user.nick,
-          playerClass: STATE.user.playerClass,
-          avatar: STATE.user.avatarUrl,
-          lat: STATE.userLat,            
-          lng: STATE.userLng,          
-          victories: STATE.victories,
-          cardsCount: STATE.cardsCaptured,          
-          level: STATE.playerLevel,          
-          online_at: new Date().toISOString()
-        });      
-      }    });
+        updatePresenceState();
+      }    
+    });
+}
+
+function updatePresenceState() {
+  if (roomChannel) {
+    roomChannel.track({
+      email: STATE.user.email,
+      session: SESSION_ID,
+      nick: STATE.user.nick,
+      playerClass: STATE.user.playerClass,
+      avatar: STATE.user.avatarUrl,
+      lat: STATE.userLat,
+      lng: STATE.userLng,
+      victories: STATE.victories,
+      cardsCount: STATE.cardsCaptured,
+      level: STATE.playerLevel,
+      pingLat: STATE.pingLat !== null ? STATE.pingLat : null,
+      pingLng: STATE.pingLng !== null ? STATE.pingLng : null,
+      online_at: new Date().toISOString()
+    });
+  }
 }
 
 function updateOnlinePlayersCount(state) {  
@@ -932,6 +960,7 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
+// 👥 RENDERIZADO BLINDADO DE JUGADORES Y RUTAS
 function renderAllPlayersOnMap(presenceState) {
   const activeEmails = [];
 
@@ -940,7 +969,17 @@ function renderAllPlayersOnMap(presenceState) {
     presences.forEach(p => {
       activeEmails.push(p.email);
 
-      if (p.email === STATE.user.email) return;
+      if (p.email === STATE.user.email) {
+        if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
+          try {
+            tacticalPings['userRoute'].setLatLngs([
+              [STATE.userLat, STATE.userLng],
+              [STATE.pingLat, STATE.pingLng]
+            ]);
+          } catch (e) {}
+        }
+        return;
+      }
 
       const avatarStyle = p.avatar 
         ? `background-image: url('${p.avatar}');` 
@@ -969,13 +1008,65 @@ function renderAllPlayersOnMap(presenceState) {
 
         playerMarkers[p.email] = marker;
       }
+
+      // 🗺️ Renderizar/Actualizar rutas ajenas de forma segura
+      const routeKey = `route_${p.email}`;
+      const markerKey = `marker_${p.email}`;
+
+      if (p.pingLat !== null && p.pingLat !== undefined && p.pingLng !== null && p.pingLng !== undefined) {
+        if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
+          try {
+            activePlayerRoutes[routeKey].setLatLngs([
+              [p.lat, p.lng],
+              [p.pingLat, p.pingLng]
+            ]);
+            activePlayerRoutes[markerKey].setLatLng([p.pingLat, p.pingLng]);
+          } catch (err) {}
+        } else {
+          try {
+            const targetIcon = L.divIcon({
+              className: 'custom-target-ping',
+              html: `<div style="background:#e63946; color:white; padding:3px 6px; border-radius:10px; font-weight:bold; font-size:10px; border:2px solid white; box-shadow:0 0 8px rgba(0,0,0,0.8);">🎯 Ruta de ${p.nick}</div>`,
+              iconSize: [120, 25],
+              iconAnchor: [60, 12]
+            });
+
+            const tMarker = L.marker([p.pingLat, p.pingLng], { icon: targetIcon }).addTo(STATE.map);
+            const tRoute = L.polyline([
+              [p.lat, p.lng],
+              [p.pingLat, p.pingLng]
+            ], { color: '#38bdf8', weight: 3, dashArray: '5, 5', opacity: 0.8 }).addTo(STATE.map);
+
+            activePlayerRoutes[markerKey] = tMarker;
+            activePlayerRoutes[routeKey] = tRoute;
+          } catch(e) {}
+        }
+      } else {
+        if (activePlayerRoutes[routeKey]) {
+          try {
+            if (activePlayerRoutes[routeKey]) STATE.map.removeLayer(activePlayerRoutes[routeKey]);
+            if (activePlayerRoutes[markerKey]) STATE.map.removeLayer(activePlayerRoutes[markerKey]);
+          } catch(e) {}
+          delete activePlayerRoutes[routeKey];
+          delete activePlayerRoutes[markerKey];
+        }
+      }
     });
   });
 
   Object.keys(playerMarkers).forEach(email => {
     if (!activeEmails.includes(email)) {
-      STATE.map.removeLayer(playerMarkers[email]);
+      if (playerMarkers[email]) STATE.map.removeLayer(playerMarkers[email]);
       delete playerMarkers[email];
+
+      if (activePlayerRoutes[`route_${email}`]) {
+        try {
+          STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+        } catch(e) {}
+        delete activePlayerRoutes[`route_${email}`];
+        delete activePlayerRoutes[`marker_${email}`];
+      }
     }
   });
 }
@@ -1184,21 +1275,7 @@ async function endBattleSession(bs) {
     playSound('victory');
     document.getElementById("winsDisplay").innerText = STATE.victories;
 
-    if (roomChannel) {
-      roomChannel.track({
-        email: STATE.user.email,
-        session: SESSION_ID,
-        nick: STATE.user.nick,
-        playerClass: STATE.user.playerClass,
-        avatar: STATE.user.avatarUrl,
-        lat: STATE.userLat,
-        lng: STATE.userLng,
-        victories: STATE.victories,
-        cardsCount: STATE.cardsCaptured,
-        level: STATE.playerLevel,
-        online_at: new Date().toISOString()
-      });
-    }
+    updatePresenceState();
 
     swal("🏆 ¡VICTORIA GENERAL DEL DUELO! 🎉", `Has ganado ${bs.myWins} de 3 rondas contra ${bs.enemy.nick}.\n\n+1 Victoria agregada a tu Ranking.`, "success");
   } else {
@@ -1255,7 +1332,8 @@ function appendChatMessage(m, isNew = false) {
   const div = document.createElement("div");  
   div.style.marginBottom = "4px";  
   div.style.opacity = "1";
-  div.innerHTML = `<b style="color:#38bdf8;">${m.nick}:</b> ${escapeHtml(m.message)}`;  
+  
+  div.innerHTML = `<b style="color:#38bdf8;">${escapeHtml(m.nick)}:</b> ${m.message}`;  
   
   container.appendChild(div);  
   container.scrollTop = container.scrollHeight;
@@ -1298,21 +1376,7 @@ function startGeolocationTracking() {
           STATE.map.setView([STATE.userLat, STATE.userLng], 16);
         }
 
-        if (roomChannel) {
-          roomChannel.track({
-            email: STATE.user.email,
-            session: SESSION_ID,
-            nick: STATE.user.nick,
-            playerClass: STATE.user.playerClass,
-            avatar: STATE.user.avatarUrl,
-            lat: STATE.userLat,
-            lng: STATE.userLng,
-            victories: STATE.victories,
-            cardsCount: STATE.cardsCaptured,
-            level: STATE.playerLevel,
-            online_at: new Date().toISOString()
-          });
-        }
+        updatePresenceState();
       },
       error => console.error("Error GPS:", error),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
