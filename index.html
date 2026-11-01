@@ -231,24 +231,8 @@ const DEFAULT_STARTER_CARD = {
   card_name: "🥊 Puño Limpio (Carta Recluta)",  
   attack: 20,  
   defense: 20,  
-  type: "Básica"
+  card_type: "Básica"
 };
-
-const CARD_POOL = [  
-  { name: "Caballero del Ebro", attack: 85, defense: 40, type: "Ataque" },  
-  { name: "Escudo de Arroz", attack: 20, defense: 90, type: "Defensa" },  
-  { name: "Garza Real", attack: 60, defense: 60, type: "Especial" },  
-  { name: "Flamenco de Fangar", attack: 75, defense: 50, type: "Ataque" },  
-  { name: "Cangrejo Azul", attack: 80, defense: 70, type: "Ataque" },  
-  { name: "Anguila del Delta", attack: 65, defense: 45, type: "Especial" },  
-  { name: "Guardián de la Laguna", attack: 30, defense: 95, type: "Defensa" },  
-  { name: "Viento de Garbí", attack: 70, defense: 30, type: "Ataque" },  
-  { name: "Esparvaró del Delta", attack: 90, defense: 35, type: "Ataque" },  
-  { name: "Tortuga de Mar", attack: 40, defense: 100, type: "Defensa" },  
-  { name: "Zorrino de Marjal", attack: 50, defense: 50, type: "Especial" },  
-  { name: "Toro Bravo del Ebro", attack: 95, defense: 60, type: "Ataque" },  
-  { name: "Musclera Tradicional", attack: 15, defense: 110, type: "Defensa" }
-];
 
 let playerMarkers = {};
 let roomChannel = null;
@@ -550,7 +534,7 @@ async function showPlayerInventory() {
   document.body.appendChild(invModal);
 }
 
-// 🗺️ Inicialización del mapa con selector de Satélite y Modo Estándar Libre
+// 🗺️ Inicialización del mapa con selector de Satélite y Mapa Estándar
 function initMap() {
   if (STATE.mapInitialized) return;
 
@@ -599,13 +583,14 @@ function launchGameEngine(durationMinutes){
 }
 
 // ==========================================
-// CARGAR Y PINTAR CARTAS (GEOCACHES)
+// CARGAR Y PINTAR CARTAS (GEOCACHES ADAPTADO A 'claimed')
 // ==========================================
 async function loadGeocachesFromSupabase() {
   const { data: caches, error } = await supabase
     .from('geocaches')
     .select('*')
-    .eq('room_code', STATE.roomCode);
+    .eq('room_code', STATE.roomCode)
+    .eq('claimed', false); // Adaptado a tu columna 'claimed' del SQL
 
   if (error) {
     console.error("Error cargando cartas del mapa:", error);
@@ -644,9 +629,10 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
+  // Marcar como reclamada en la base de datos usando 'claimed'
   const { error } = await supabase
     .from('geocaches')
-    .delete()
+    .update({ claimed: true })
     .eq('id', cache.id);
 
   if (error) {
@@ -659,21 +645,21 @@ async function attemptCollectGeocache(cache) {
     delete mapMarkersList[cache.id];
   }
 
-  const randomCardTemplate = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
-  
+  // Guardar en el inventario del jugador
   await supabase.from('player_cards').insert({
     room_code: STATE.roomCode,
     user_email: STATE.user.email,
-    card_name: randomCardTemplate.name,
-    attack: randomCardTemplate.attack,
-    defense: randomCardTemplate.defense,
-    type: randomCardTemplate.type
+    team: STATE.team,
+    card_name: cache.card_name,
+    attack: cache.attack,
+    defense: cache.defense,
+    image_url: cache.image_url || ''
   });
 
   STATE.cardsCaptured++;
   checkPlayerLevelProgression();
 
-  swal("¡Carta Capturada! 🎴🎉", `Has conseguido: ${randomCardTemplate.name}\n⚔️ ATK: ${randomCardTemplate.attack} | 🛡️ DEF: ${randomCardTemplate.defense}`, "success");
+  swal("¡Carta Capturada! 🎴🎉", `Has conseguido: ${cache.card_name}\n⚔️ ATK: ${cache.attack} | 🛡️ DEF: ${cache.defense}`, "success");
 }
 
 function listenGeocacheChanges() {
@@ -681,10 +667,10 @@ function listenGeocacheChanges() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
       renderGeocacheMarker(payload.new);
     })
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
-      if (mapMarkersList[payload.old.id]) {
-        STATE.map.removeLayer(mapMarkersList[payload.old.id]);
-        delete mapMarkersList[payload.old.id];
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'geocaches', filter: `room_code=eq.${STATE.roomCode}` }, payload => {
+      if (payload.new.claimed && mapMarkersList[payload.new.id]) {
+        STATE.map.removeLayer(mapMarkersList[payload.new.id]);
+        delete mapMarkersList[payload.new.id];
       }
     })
     .subscribe();
