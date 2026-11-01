@@ -419,7 +419,7 @@ window.showHowToPlay = function(){
         <p><b>1. 👁️ Jugadores en Vivo:</b> Verás a todos los contrincantes en tiempo real. Toca su foto para ver sus victorias y nivel.</p>
         <p><b>2. 🏆 Top 5 Ranking:</b> Consulta quién lidera la sala en victorias ganadas.</p>
         <p><b>3. ⚔️ Duelos a 3 Turnos:</b> Desafía a rivales a menos de 15m. ¡Elige tus mejores cartas para ganar la ronda!</p>
-        <p><b>4. 🎯 Rutas Tácticas Compartidas:</b> Haz clic en cualquier lugar del mapa para fijar una ruta. ¡Tus compañeros verán tu destino!</p>      
+        <p><b>4. 🎯 Rutas Tácticas con Enlace:</b> Haz clic en el mapa para marcar una ruta. Se enviará un enlace automático al chat con las coordenadas exactas.</p>      
       </div><br>      
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>    
     </div>  `;  
@@ -718,15 +718,16 @@ window.toggleMapStyle = function() {
   }
 };
 
-// 🎯 MULTIJUGADOR: COLOCAR Y SINCRONIZAR MARCADOR Y RUTA
+// 🎯 MULTIJUGADOR: COLOCAR Y ENVIAR ENLACE DE RUTA AL CHAT
 async function placeTacticalPing(lat, lng) {
   STATE.pingLat = lat;
   STATE.pingLng = lng;
 
+  const mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
   await supabase.from('geocard_mensajes').insert({
     room_code: STATE.roomCode,
     nick: STATE.user.nick,
-    message: `🎯 [MARCADOR] ${STATE.user.nick} ha trazado una ruta en el mapa`
+    message: `🎯 [RUTA] ${STATE.user.nick} ha marcado un objetivo. <a href="${mapLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">Ver Destino 📍</a>`
   });
 
   removeTacticalPing(false);
@@ -748,7 +749,7 @@ async function placeTacticalPing(lat, lng) {
   tacticalPings['userRoute'] = routeLine;
 
   document.getElementById("removePingBtn").style.display = "inline-block";
-  swal("¡Ruta Trazada! 🎯", "Posición marcada. Tus compañeros pueden ver tu ruta.", "success");
+  swal("¡Ruta Trazada! 🎯", "Posición marcada y enlace enviado al chat para tus compañeros.", "success");
 
   updatePresenceState();
 }
@@ -946,8 +947,8 @@ function updatePresenceState() {
       victories: STATE.victories,
       cardsCount: STATE.cardsCaptured,
       level: STATE.playerLevel,
-      pingLat: STATE.pingLat !== undefined ? STATE.pingLat : null,
-      pingLng: STATE.pingLng !== undefined ? STATE.pingLng : null,
+      pingLat: STATE.pingLat !== null ? STATE.pingLat : null,
+      pingLng: STATE.pingLng !== null ? STATE.pingLng : null,
       online_at: new Date().toISOString()
     });
   }
@@ -959,7 +960,7 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 MOSTRAR JUGADORES Y DIBUJAR SUS RUTAS EN TIEMPO REAL (CORREGIDO Y SEGURO)
+// 👥 RENDERIZADO BLINDADO DE JUGADORES Y RUTAS
 function renderAllPlayersOnMap(presenceState) {
   const activeEmails = [];
 
@@ -1008,7 +1009,7 @@ function renderAllPlayersOnMap(presenceState) {
         playerMarkers[p.email] = marker;
       }
 
-      // 🗺️ Renderizar/Actualizar marcadores y líneas de ruta de otros jugadores de forma segura
+      // 🗺️ Renderizar/Actualizar rutas ajenas de forma segura
       const routeKey = `route_${p.email}`;
       const markerKey = `marker_${p.email}`;
 
@@ -1331,7 +1332,8 @@ function appendChatMessage(m, isNew = false) {
   const div = document.createElement("div");  
   div.style.marginBottom = "4px";  
   div.style.opacity = "1";
-  div.innerHTML = `<b style="color:#38bdf8;">${m.nick}:</b> ${escapeHtml(m.message)}`;  
+  
+  div.innerHTML = `<b style="color:#38bdf8;">${escapeHtml(m.nick)}:</b> ${m.message}`;  
   
   container.appendChild(div);  
   container.scrollTop = container.scrollHeight;
