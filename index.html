@@ -959,7 +959,7 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 MOSTRAR JUGADORES Y DIBUJAR SUS RUTAS EN TIEMPO REAL
+// 👥 MOSTRAR JUGADORES Y DIBUJAR SUS RUTAS EN TIEMPO REAL (CORREGIDO)
 function renderAllPlayersOnMap(presenceState) {
   const activeEmails = [];
 
@@ -969,7 +969,7 @@ function renderAllPlayersOnMap(presenceState) {
       activeEmails.push(p.email);
 
       if (p.email === STATE.user.email) {
-        if (tacticalPings['userRoute']) {
+        if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
           tacticalPings['userRoute'].setLatLngs([
             [STATE.userLat, STATE.userLng],
             [STATE.pingLat, STATE.pingLng]
@@ -1006,17 +1006,21 @@ function renderAllPlayersOnMap(presenceState) {
         playerMarkers[p.email] = marker;
       }
 
-      // 🗺️ Renderizar/Actualizar marcadores y líneas de ruta de otros jugadores
+      // 🗺️ Renderizar/Actualizar marcadores y líneas de ruta de otros jugadores de forma segura
       const routeKey = `route_${p.email}`;
       const markerKey = `marker_${p.email}`;
 
       if (p.pingLat && p.pingLng) {
-        if (activePlayerRoutes[routeKey]) {
-          activePlayerRoutes[routeKey].setLatLngs([
-            [p.lat, p.lng],
-            [p.pingLat, p.pingLng]
-          ]);
-          activePlayerRoutes[markerKey].setLatLng([p.pingLat, p.pingLng]);
+        if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
+          try {
+            activePlayerRoutes[routeKey].setLatLngs([
+              [p.lat, p.lng],
+              [p.pingLat, p.pingLng]
+            ]);
+            activePlayerRoutes[markerKey].setLatLng([p.pingLat, p.pingLng]);
+          } catch (err) {
+            console.warn("Actualizando ruta de forma segura...");
+          }
         } else {
           const targetIcon = L.divIcon({
             className: 'custom-target-ping',
@@ -1036,8 +1040,8 @@ function renderAllPlayersOnMap(presenceState) {
         }
       } else {
         if (activePlayerRoutes[routeKey]) {
-          STATE.map.removeLayer(activePlayerRoutes[routeKey]);
-          STATE.map.removeLayer(activePlayerRoutes[markerKey]);
+          if (activePlayerRoutes[routeKey]) STATE.map.removeLayer(activePlayerRoutes[routeKey]);
+          if (activePlayerRoutes[markerKey]) STATE.map.removeLayer(activePlayerRoutes[markerKey]);
           delete activePlayerRoutes[routeKey];
           delete activePlayerRoutes[markerKey];
         }
@@ -1051,8 +1055,8 @@ function renderAllPlayersOnMap(presenceState) {
       delete playerMarkers[email];
 
       if (activePlayerRoutes[`route_${email}`]) {
-        STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
-        STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+        if (activePlayerRoutes[`route_${email}`]) STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
+        if (activePlayerRoutes[`marker_${email}`]) STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
         delete activePlayerRoutes[`route_${email}`];
         delete activePlayerRoutes[`marker_${email}`];
       }
