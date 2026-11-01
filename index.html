@@ -538,10 +538,10 @@ async function showPlayerInventory() {
 function initMap() {
   if (STATE.mapInitialized) return;
 
-  // Capa 1: Modo Oscuro (Predeterminada)
-  const darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  // Capa 1: Modo Mapa Estándar (Libre y sin API Key)
+  const darkTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    attribution: '&copy; OpenStreetMap contributors'
   });
 
   // Capa 2: Vista de Satélite (Esri World Imagery)
