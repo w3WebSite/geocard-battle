@@ -59,7 +59,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 1px solid rgba(255,255,255,0.15);
 }
 
-/* 🗺️ Controles Flotantes Superiores Reorganizados */
+/* 🗺️ Controles Flotantes Superiores */
 #mapControlsContainer {
   position: fixed; top: 15px; left: 15px; z-index: 600;
   display: none; gap: 8px; align-items: center; flex-wrap: wrap;
@@ -76,7 +76,7 @@ button:hover{ transform:scale(1.05); box-shadow:0 8px 18px rgba(0,0,0,0.4); }
   border: 2px solid #ffb703; display: none;
 }
 
-/* ⏱️ Cabecera y Temporizador desplazados para evitar solapes */
+/* ⏱️ Cabecera y Temporizador */
 #topGameBar {
   position: fixed; top: 15px; right: 140px; z-index: 500;
   display: none; text-align: right;
@@ -187,9 +187,15 @@ option { background: #0f172a; color: white; }
   border: 1px solid rgba(255,255,255,0.08);
 }
 .player-avatar-icon {
-  width: 44px; height: 44px; border-radius: 50%; border: 2px solid #e9c46a;
+  width: 44px; height: 44px; border-radius: 50%; border: 3px solid #e9c46a;
   background-size: cover; background-position: center; box-shadow: 0 0 12px rgba(0,0,0,0.8);
+  cursor: pointer; transition: transform 0.2s ease;
 }
+.player-avatar-icon:hover {
+  transform: scale(1.2);
+}
+.team-red-border { border-color: #e63946 !important; }
+.team-blue-border { border-color: #38bdf8 !important; }
 </style>
 <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 </head>
@@ -392,10 +398,10 @@ window.showHowToPlay = function(){
     <div>      
       <h2>📜 Guía de Combate Avanzado</h2>      
       <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.5; max-height: 250px; overflow-y: auto; padding: 5px;">        
-        <p><b>1. ⚔️ Duelos de 3 Turnos:</b> Las batallas PvP constan de 3 rondas. ¡Elige sabiamente tus cartas!</p>
-        <p><b>2. ⭐ Evolución de Cartas:</b> Si capturas una carta duplicada, subirá de evolución potenciando sus atributos.</p>
-        <p><b>3. 📸 Foto del Móvil:</b> Puedes usar la cámara o la galería para tu avatar.</p>
-        <p><b>4. 📍 Pines Tácticos:</b> Marca puntos en el mapa y quítalos cuando quieras.</p>      
+        <p><b>1. 👁️ Jugadores en el Mapa:</b> Verás a todos los jugadores en tiempo real. Haz clic sobre su foto para inspeccionar sus atributos.</p>
+        <p><b>2. ⚔️ Duelos de 3 Turnos:</b> Las batallas PvP constan de 3 rondas. Elige sabiamente tus cartas.</p>
+        <p><b>3. ⭐ Evolución de Cartas:</b> Si capturas una carta duplicada, subirá de evolución potenciando sus atributos.</p>
+        <p><b>4. 📍 Pines Tácticos:</b> Marca puntos en el mapa para tu equipo.</p>      
       </div><br>      
       <button onclick="document.getElementById('helpModal').remove()">¡Entendido! 🚀</button>    
     </div>  `;  
@@ -593,7 +599,6 @@ window.processPlayerLogin = async function(){
   launchGameEngine(roomData.duration || 30);
 };
 
-// 🎒 INVENTARIO CON EVOLUCIÓN VISUAL (⭐)
 async function showPlayerInventory() {  
   const { data: myCards, error } = await supabase    
     .from('player_cards')    
@@ -770,7 +775,6 @@ function renderGeocacheMarker(cache) {
   mapMarkersList[cache.id] = marker;
 }
 
-// 🎴 CAPTURA Y EVOLUCIÓN AUTOMÁTICA DE CARTAS DUPLICADAS
 async function attemptCollectGeocache(cache) {
   const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, cache.lat, cache.lng);
 
@@ -786,7 +790,6 @@ async function attemptCollectGeocache(cache) {
     delete mapMarkersList[cache.id];
   }
 
-  // Comprobar si ya existe la carta en el inventario para evolucionarla
   const { data: existingCards } = await supabase
     .from('player_cards')
     .select('*')
@@ -876,6 +879,7 @@ function checkPlayerLevelProgression() {
   }
 }
 
+// 👥 CONTROL DE PRESENCIA Y MOSTRAR JUGADORES EN EL MAPA
 function setupRealtimePresence(){  
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
     config: { presence: { key: STATE.user.email } }  
@@ -885,13 +889,15 @@ function setupRealtimePresence(){
     .on('presence', { event: 'sync' }, () => {      
       const state = roomChannel.presenceState();      
       updateOnlinePlayersCount(state);      
+      renderAllPlayersOnMap(state);
       checkNearbyPlayersForBattle(state);    })    
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
         await roomChannel.track({          
           email: STATE.user.email,          
           session: SESSION_ID,          
-          nick: `${STATE.user.nick} (${STATE.user.playerClass})`,          
+          nick: STATE.user.nick,
+          playerClass: STATE.user.playerClass,
           avatar: STATE.user.avatarUrl,
           lat: STATE.userLat,             
           lng: STATE.userLng,          
@@ -906,6 +912,105 @@ function updateOnlinePlayersCount(state) {
   Object.keys(state).forEach(key => { count += state[key].length; });  
   document.getElementById("onlineCount").innerText = count;
 }
+
+// 👥 DIBUJAR A TODOS LOS JUGADORES Y GESTIONAR CLICS EN SUS AVATARES
+function renderAllPlayersOnMap(presenceState) {
+  const currentEmails = [];
+
+  Object.keys(presenceState).forEach(clientId => {
+    const presences = presenceState[clientId];
+    presences.forEach(p => {
+      currentEmails.push(p.email);
+
+      // Si es el usuario actual, no dibujamos duplicado (ya tiene STATE.userMarker)
+      if (p.email === STATE.user.email) return;
+
+      const borderClass = p.team === 'red' ? 'team-red-border' : 'team-blue-border';
+      const avatarStyle = p.avatar 
+        ? `background-image: url('${p.avatar}');` 
+        : `background: ${p.team === 'red' ? '#e63946' : '#38bdf8'}; display:flex; justify-content:center; align-items:center; font-size:18px;`;
+
+      const avatarContent = p.avatar ? '' : (p.team === 'red' ? '🔴' : '🔵');
+
+      const customPlayerIcon = L.divIcon({
+        className: 'custom-player-avatar',
+        html: `<div class="player-avatar-icon ${borderClass}" style="${avatarStyle}">${avatarContent}</div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
+      });
+
+      if (playerMarkers[p.email]) {
+        playerMarkers[p.email].setLatLng([p.lat, p.lng]);
+        playerMarkers[p.email].playerData = p;
+      } else {
+        const marker = L.marker([p.lat, p.lng], { icon: customPlayerIcon }).addTo(STATE.map);
+        marker.playerData = p;
+        
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          showPlayerProfileModal(marker.playerData);
+        });
+
+        playerMarkers[p.email] = marker;
+      }
+    });
+  });
+
+  // Limpiar marcadores de jugadores desconectados
+  Object.keys(playerMarkers).forEach(email => {
+    if (!currentEmails.includes(email)) {
+      STATE.map.removeLayer(playerMarkers[email]);
+      delete playerMarkers[email];
+    }
+  });
+}
+
+// 🔍 MODAL EXPANDIDO DE ATRIBUTOS DEL JUGADOR
+function showPlayerProfileModal(p) {
+  const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);
+  const teamName = p.team === 'red' ? 'Equipo Rojo 🔴' : 'Equipo Azul 🔵';
+  const avatarImg = p.avatar 
+    ? `<img src="${p.avatar}" style="width:100px; height:100px; border-radius:50%; border:3px solid #e9c46a; object-fit:cover; margin-bottom:10px; box-shadow:0 0 15px rgba(0,0,0,0.8);">` 
+    : `<div style="width:80px; height:80px; border-radius:50%; background:#2a9d8f; display:inline-flex; justify-content:center; align-items:center; font-size:35px; border:3px solid #e9c46a; margin-bottom:10px;">👤</div>`;
+
+  let attackBonus = (p.playerClass || '').includes("Guerrero") ? "+15 ATK" : "Normal";
+  let defenseBonus = (p.playerClass || '').includes("Guardián") ? "+15 DEF" : "Normal";
+
+  const isEnemy = p.team !== STATE.team;
+  const canChallenge = isEnemy && distance <= 15;
+
+  const profileModal = document.createElement("div");
+  profileModal.className = "modal";
+  profileModal.id = "playerProfileModal";
+  profileModal.innerHTML = `
+    <div>
+      ${avatarImg}
+      <h2 style="margin:5px 0;">${p.nick}</h2>
+      <p style="font-size:13px; color:#e9c46a; margin-bottom:12px;"><b>${p.playerClass || 'Aventurero'}</b> | ${teamName}</p>
+      
+      <div style="background:rgba(255,255,255,0.06); padding:12px; border-radius:12px; text-align:left; font-size:13px; line-height:1.6; border:1px solid rgba(255,255,255,0.1); margin-bottom:15px;">
+        <p style="margin:2px 0;">⭐ <b>Nivel de Jugador:</b> Nivel ${p.level || 1}</p>
+        <p style="margin:2px 0;">🎴 <b>Cartas Capturadas:</b> ${p.cardsCount || 0}</p>
+        <p style="margin:2px 0;">⚔️ <b>Bonus de Clase:</b> ${attackBonus} / ${defenseBonus}</p>
+        <p style="margin:2px 0;">📍 <b>Distancia actual:</b> a ${Math.round(distance)} metros</p>
+      </div>
+
+      ${canChallenge ? `<button onclick="window.challengeFromModal('${p.email}')" style="background:linear-gradient(45deg,#e63946,#d62828); width:100%; margin-bottom:10px;">⚔️ ¡Desafiar a Duelo Táctico!</button>` : ''}
+      <button onclick="document.getElementById('playerProfileModal').remove()" style="width:100%; background:linear-gradient(45deg,#457b9d,#1d3557);">Cerrar ✖️</button>
+    </div>
+  `;
+  document.body.appendChild(profileModal);
+
+  window.currentSelectedPlayer = p;
+}
+
+window.challengeFromModal = function(email) {
+  const modal = document.getElementById("playerProfileModal");
+  if (modal) modal.remove();
+  if (window.currentSelectedPlayer) {
+    startBattle3Turns(window.currentSelectedPlayer);
+  }
+};
 
 function checkNearbyPlayersForBattle(presenceState) {  
   if (STATE.inBattle) return;
@@ -936,9 +1041,7 @@ function promptBattleConsent(enemy) {
       swal("Has huido 💨", "Te has retirado de la zona.", "info");    }  });
 }
 
-// ==========================================
 // ⚔️ SISTEMA DE BATALLA TÁCTICA A 3 TURNOS
-// ==========================================
 async function startBattle3Turns(enemy) {
   STATE.inBattle = true;
 
@@ -1104,8 +1207,8 @@ function startGeolocationTracking() {
         STATE.userLng = position.coords.longitude;
         
         const avatarHtml = STATE.user.avatarUrl 
-          ? `<div class="player-avatar-icon" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
-          : `<div class="player-avatar-icon" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
+          ? `<div class="player-avatar-icon ${STATE.team === 'red' ? 'team-red-border' : 'team-blue-border'}" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
+          : `<div class="player-avatar-icon ${STATE.team === 'red' ? 'team-red-border' : 'team-blue-border'}" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
 
         const userCustomIcon = L.divIcon({
           className: 'custom-user-icon',
@@ -1121,6 +1224,23 @@ function startGeolocationTracking() {
           STATE.userMarker = L.marker([STATE.userLat, STATE.userLng], { icon: userCustomIcon }).addTo(STATE.map).bindPopup("¡Estás aquí!");
           STATE.rangeCircle = L.circle([STATE.userLat, STATE.userLng], { radius: 15, color: '#2a9d8f', fillColor: '#2a9d8f', fillOpacity: 0.15 }).addTo(STATE.map);
           STATE.map.setView([STATE.userLat, STATE.userLng], 16);
+        }
+
+        // Actualizar la posición propia en la presencia Realtime
+        if (roomChannel) {
+          roomChannel.track({
+            email: STATE.user.email,
+            session: SESSION_ID,
+            nick: STATE.user.nick,
+            playerClass: STATE.user.playerClass,
+            avatar: STATE.user.avatarUrl,
+            lat: STATE.userLat,
+            lng: STATE.userLng,
+            team: STATE.team,
+            cardsCount: STATE.cardsCaptured,
+            level: STATE.playerLevel,
+            online_at: new Date().toISOString()
+          });
         }
       },
       error => console.error("Error GPS:", error),
