@@ -12,7 +12,7 @@ body{
   font-family: 'Trebuchet MS', Arial, sans-serif;  
   color:white;  
   background: linear-gradient(135deg, rgba(5, 15, 25, 0.85), rgba(10, 40, 50, 0.75)),                
-            url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");  
+              url("https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1920&auto=format&fit=crop");  
   background-size: cover;  
   background-position: center;  
   background-attachment: fixed;
@@ -259,6 +259,8 @@ const SESSION_ID = Math.random().toString(36).substring(2, 9);
 
 let unreadMessagesCount = 0;
 let isChatModalOpen = false;
+let lastSpawnLat = null;
+let lastSpawnLng = null;
 
 // 🎵 Efectos de sonido
 const SOUNDS = {
@@ -378,6 +380,10 @@ function updateChatBadge() {
 }
 
 function showLoginScreen(){  
+  const savedNick = localStorage.getItem('geo_nick') || '';
+  const savedRoom = localStorage.getItem('geo_room') || '';
+  const savedClass = localStorage.getItem('geo_class') || '⚔️ Guerrero';
+
   const modalDiv = document.createElement("div");  
   modalDiv.className = "modal";  
   modalDiv.id = "loginModal";  
@@ -385,7 +391,7 @@ function showLoginScreen(){
     <div>      
       <h2>🎴 GeoCard Battle Global</h2>      
       <p style="margin-bottom:5px; font-size:13px; color:#cbd5e1;"><b>Configura tu perfil de combate:</b></p>      
-      <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)"><br>      
+      <input id="loginNick" placeholder="Tu Nick / Nombre (Ej: Marc)" value="${savedNick}"><br>      
       
       <div style="margin: 8px 0; text-align: left; width: 80%; margin-left: 10%;">
         <label style="font-size: 12px; color: #cbd5e1;">📸 Foto de Perfil (Cámara o Galería):</label><br>
@@ -393,12 +399,12 @@ function showLoginScreen(){
       </div>
 
       <select id="playerClassSelect">        
-        <option value="⚔️ Guerrero">⚔️ Guerrero (+15 ATK)</option>        
-        <option value="🛡️ Guardián">🛡️ Guardián (+15 DEF)</option>        
-        <option value="⚡ Explorador">⚡ Explorador (Agilidad)</option>        
-        <option value="🔮 Mago Táctico">🔮 Mago Táctico (Especial)</option>      
+        <option value="⚔️ Guerrero" ${savedClass === '⚔️ Guerrero' ? 'selected' : ''}>⚔️ Guerrero (+15 ATK)</option>        
+        <option value="🛡️ Guardián" ${savedClass === '🛡️ Guardián' ? 'selected' : ''}>🛡️ Guardián (+15 DEF)</option>        
+        <option value="⚡ Explorador" ${savedClass === '⚡ Explorador' ? 'selected' : ''}>⚡ Explorador (Agilidad)</option>        
+        <option value="🔮 Mago Táctico" ${savedClass === '🔮 Mago Táctico' ? 'selected' : ''}>🔮 Mago Táctico (Especial)</option>      
       </select><br>      
-      <input id="playerRoomCode" placeholder="Código de Sala"><br><br>      
+      <input id="playerRoomCode" placeholder="Código de Sala" value="${savedRoom}"><br><br>      
       <button onclick="window.processPlayerLogin()" style="width:90%;">Entrar al Juego 🚀</button><br>      
       <div style="display:flex; justify-content:center; gap:10px; margin-top:5px;">        
         <button onclick="window.showHowToPlay()" class="btn-secondary" style="width:43%;">❓ ¿Cómo Jugar?</button>        
@@ -593,7 +599,7 @@ window.processPlayerLogin = async function(){
     swal("Falta Código", "Debes ingresar el Código de la Partida", "warning");     
     return;   }
 
-  let avatarBase64 = "";
+  let avatarBase64 = localStorage.getItem('geo_avatar') || "";
   if (fileInput.files && fileInput.files[0]) {
     avatarBase64 = await compressImage(fileInput.files[0]);
   }
@@ -608,6 +614,11 @@ window.processPlayerLogin = async function(){
   if(error || !roomData) {    
     swal("Sala no encontrada ❌", `La sala "${roomCodeInput}" no existe o el Administrador aún no la ha creado.`, "error");    
     return;  }
+
+  localStorage.setItem('geo_nick', nickInput);
+  localStorage.setItem('geo_room', roomCodeInput);
+  localStorage.setItem('geo_class', playerClass);
+  if (avatarBase64) localStorage.setItem('geo_avatar', avatarBase64);
 
   STATE.isAdmin = false;  
   STATE.user.nick = nickInput;  
@@ -718,7 +729,6 @@ window.toggleMapStyle = function() {
   }
 };
 
-// 🎯 MULTIJUGADOR: COLOCAR Y ENVIAR ENLACE DE RUTA AL CHAT
 async function placeTacticalPing(lat, lng) {
   STATE.pingLat = lat;
   STATE.pingLng = lng;
@@ -787,7 +797,6 @@ function launchGameEngine(durationMinutes){
   loadChatMessages();  
   listenChatMessages();  
   startTimer(durationMinutes * 60);  
-  checkPlayerLevelProgression();
 }
 
 async function loadGeocachesFromSupabase() {
@@ -872,6 +881,7 @@ async function attemptCollectGeocache(cache) {
 
   STATE.cardsCaptured++;
   checkPlayerLevelProgression();
+  updatePresenceState();
 }
 
 function listenGeocacheChanges() {
@@ -915,38 +925,52 @@ function checkPlayerLevelProgression() {
   }
 }
 
+// 👥 MULTIJUGADOR CORREGIDO (PRESENCIA ÚNICA POR SESIÓN)
 function setupRealtimePresence(){  
+  if (roomChannel) supabase.removeChannel(roomChannel);
+
+  // 🔑 Clave única combinando Email + SESSION_ID para no sobrescribir usuarios
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
-    config: { presence: { key: STATE.user.email } }  
+    config: { presence: { key: STATE.user.email + '_' + SESSION_ID } }  
   });
 
-  roomChannel    
+  roomChannel
     .on('presence', { event: 'sync' }, () => {      
       currentPresenceState = roomChannel.presenceState();      
       updateOnlinePlayersCount(currentPresenceState);      
       renderAllPlayersOnMap(currentPresenceState);
       checkNearbyPlayersForBattle(currentPresenceState);
-    })    
+    })
+    .on('presence', { event: 'join' }, () => {
+      currentPresenceState = roomChannel.presenceState();
+      updateOnlinePlayersCount(currentPresenceState);
+      renderAllPlayersOnMap(currentPresenceState);
+    })
+    .on('presence', { event: 'leave' }, () => {
+      currentPresenceState = roomChannel.presenceState();
+      updateOnlinePlayersCount(currentPresenceState);
+      renderAllPlayersOnMap(currentPresenceState);
+    })
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
-        updatePresenceState();
+        await updatePresenceState();
       }    
     });
 }
 
 function updatePresenceState() {
   if (roomChannel) {
-    roomChannel.track({
+    return roomChannel.track({
       email: STATE.user.email,
       session: SESSION_ID,
       nick: STATE.user.nick,
       playerClass: STATE.user.playerClass,
       avatar: STATE.user.avatarUrl,
-      lat: STATE.userLat,
-      lng: STATE.userLng,
-      victories: STATE.victories,
-      cardsCount: STATE.cardsCaptured,
-      level: STATE.playerLevel,
+      lat: STATE.userLat || 40.7164,
+      lng: STATE.userLng || 0.7365,
+      victories: STATE.victories || 0,
+      cardsCount: STATE.cardsCaptured || 0,
+      level: STATE.playerLevel || 1,
       pingLat: STATE.pingLat !== null ? STATE.pingLat : null,
       pingLng: STATE.pingLng !== null ? STATE.pingLng : null,
       online_at: new Date().toISOString()
@@ -960,16 +984,17 @@ function updateOnlinePlayersCount(state) {
   document.getElementById("onlineCount").innerText = count;
 }
 
-// 👥 RENDERIZADO BLINDADO DE JUGADORES Y RUTAS
 function renderAllPlayersOnMap(presenceState) {
-  const activeEmails = [];
+  const activeSessions = [];
 
   Object.keys(presenceState).forEach(key => {
     const presences = presenceState[key];
     presences.forEach(p => {
-      activeEmails.push(p.email);
+      const uniquePlayerKey = p.email + '_' + (p.session || 'def');
+      activeSessions.push(uniquePlayerKey);
 
-      if (p.email === STATE.user.email) {
+      // Comprobar por SESSION_ID para no ocultar a otros clientes con el mismo Nick
+      if (p.session === SESSION_ID) {
         if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
           try {
             tacticalPings['userRoute'].setLatLngs([
@@ -994,9 +1019,9 @@ function renderAllPlayersOnMap(presenceState) {
         iconAnchor: [22, 22]
       });
 
-      if (playerMarkers[p.email]) {
-        playerMarkers[p.email].setLatLng([p.lat, p.lng]);
-        playerMarkers[p.email].playerData = p;
+      if (playerMarkers[uniquePlayerKey]) {
+        playerMarkers[uniquePlayerKey].setLatLng([p.lat, p.lng]);
+        playerMarkers[uniquePlayerKey].playerData = p;
       } else {
         const marker = L.marker([p.lat, p.lng], { icon: customPlayerIcon }).addTo(STATE.map);
         marker.playerData = p;
@@ -1006,12 +1031,11 @@ function renderAllPlayersOnMap(presenceState) {
           showPlayerProfileModal(marker.playerData);
         });
 
-        playerMarkers[p.email] = marker;
+        playerMarkers[uniquePlayerKey] = marker;
       }
 
-      // 🗺️ Renderizar/Actualizar rutas ajenas de forma segura
-      const routeKey = `route_${p.email}`;
-      const markerKey = `marker_${p.email}`;
+      const routeKey = `route_${uniquePlayerKey}`;
+      const markerKey = `marker_${uniquePlayerKey}`;
 
       if (p.pingLat !== null && p.pingLat !== undefined && p.pingLng !== null && p.pingLng !== undefined) {
         if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
@@ -1054,18 +1078,18 @@ function renderAllPlayersOnMap(presenceState) {
     });
   });
 
-  Object.keys(playerMarkers).forEach(email => {
-    if (!activeEmails.includes(email)) {
-      if (playerMarkers[email]) STATE.map.removeLayer(playerMarkers[email]);
-      delete playerMarkers[email];
+  Object.keys(playerMarkers).forEach(uniqueKey => {
+    if (!activeSessions.includes(uniqueKey)) {
+      if (playerMarkers[uniqueKey]) STATE.map.removeLayer(playerMarkers[uniqueKey]);
+      delete playerMarkers[uniqueKey];
 
-      if (activePlayerRoutes[`route_${email}`]) {
+      if (activePlayerRoutes[`route_${uniqueKey}`]) {
         try {
-          STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
-          STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`route_${uniqueKey}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`marker_${uniqueKey}`]);
         } catch(e) {}
-        delete activePlayerRoutes[`route_${email}`];
-        delete activePlayerRoutes[`marker_${email}`];
+        delete activePlayerRoutes[`route_${uniqueKey}`];
+        delete activePlayerRoutes[`marker_${uniqueKey}`];
       }
     }
   });
@@ -1172,12 +1196,12 @@ function checkNearbyPlayersForBattle(presenceState) {
   Object.keys(presenceState).forEach(clientId => {    
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
-      if (p.email !== STATE.user.email) {        
-        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);              
+      if (p.session !== SESSION_ID) {        
+        const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);            
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
           STATE.lastEnemyBattled = p.email;          
-          promptBattleConsent(p);       }      }    });  });
+          promptBattleConsent(p);      }      }    });  });
 }
 
 function promptBattleConsent(enemy) {  
@@ -1352,10 +1376,30 @@ function appendChatMessage(m, isNew = false) {
 function startGeolocationTracking() {
   if ("geolocation" in navigator) {
     STATE.watchPositionId = navigator.geolocation.watchPosition(
-      position => {
+      async position => {
         STATE.userLat = position.coords.latitude;
         STATE.userLng = position.coords.longitude;
         
+        if (!lastSpawnLat || !lastSpawnLng || getDistanceInMeters(lastSpawnLat, lastSpawnLng, STATE.userLat, STATE.userLng) > 80) {
+          lastSpawnLat = STATE.userLat;
+          lastSpawnLng = STATE.userLng;
+          
+          const randomCard = CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)];
+          const spawnLat = STATE.userLat + (Math.random() - 0.5) * 0.008;
+          const spawnLng = STATE.userLng + (Math.random() - 0.5) * 0.008;
+
+          await supabase.from('geocaches').insert({
+            room_code: STATE.roomCode,
+            lat: spawnLat,
+            lng: spawnLng,
+            claimed: false,
+            card_name: randomCard.name,
+            card_type: randomCard.type,
+            attack: randomCard.attack,
+            defense: randomCard.defense
+          });
+        }
+
         const avatarHtml = STATE.user.avatarUrl 
           ? `<div class="player-avatar-icon" style="background-image: url('${STATE.user.avatarUrl}')"></div>` 
           : `<div class="player-avatar-icon" style="background: #2a9d8f; display:flex; justify-content:center; align-items:center;">📍</div>`;
