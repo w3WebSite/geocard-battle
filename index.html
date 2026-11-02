@@ -615,7 +615,6 @@ window.processPlayerLogin = async function(){
     swal("Sala no encontrada ❌", `La sala "${roomCodeInput}" no existe o el Administrador aún no la ha creado.`, "error");    
     return;  }
 
-  // Guardar en localStorage para persistencia automática de sesión
   localStorage.setItem('geo_nick', nickInput);
   localStorage.setItem('geo_room', roomCodeInput);
   localStorage.setItem('geo_class', playerClass);
@@ -839,7 +838,6 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
-  // Marcar como reclamada globalmente para que desaparezca para todos
   await supabase.from('geocaches').update({ claimed: true }).eq('id', cache.id);
 
   if (mapMarkersList[cache.id]) {
@@ -927,38 +925,51 @@ function checkPlayerLevelProgression() {
   }
 }
 
+// 👥 MULTIJUGADOR REFORZADO CON DETECCIÓN INMEDIATA
 function setupRealtimePresence(){  
+  if (roomChannel) supabase.removeChannel(roomChannel);
+
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
     config: { presence: { key: STATE.user.email } }  
   });
 
-  roomChannel    
+  roomChannel
     .on('presence', { event: 'sync' }, () => {      
       currentPresenceState = roomChannel.presenceState();      
       updateOnlinePlayersCount(currentPresenceState);      
       renderAllPlayersOnMap(currentPresenceState);
       checkNearbyPlayersForBattle(currentPresenceState);
-    })    
+    })
+    .on('presence', { event: 'join' }, () => {
+      currentPresenceState = roomChannel.presenceState();
+      updateOnlinePlayersCount(currentPresenceState);
+      renderAllPlayersOnMap(currentPresenceState);
+    })
+    .on('presence', { event: 'leave' }, () => {
+      currentPresenceState = roomChannel.presenceState();
+      updateOnlinePlayersCount(currentPresenceState);
+      renderAllPlayersOnMap(currentPresenceState);
+    })
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
-        updatePresenceState();
+        await updatePresenceState();
       }    
     });
 }
 
 function updatePresenceState() {
   if (roomChannel) {
-    roomChannel.track({
+    return roomChannel.track({
       email: STATE.user.email,
       session: SESSION_ID,
       nick: STATE.user.nick,
       playerClass: STATE.user.playerClass,
       avatar: STATE.user.avatarUrl,
-      lat: STATE.userLat,
-      lng: STATE.userLng,
-      victories: STATE.victories,
-      cardsCount: STATE.cardsCaptured,
-      level: STATE.playerLevel,
+      lat: STATE.userLat || 40.7164,
+      lng: STATE.userLng || 0.7365,
+      victories: STATE.victories || 0,
+      cardsCount: STATE.cardsCaptured || 0,
+      level: STATE.playerLevel || 1,
       pingLat: STATE.pingLat !== null ? STATE.pingLat : null,
       pingLng: STATE.pingLng !== null ? STATE.pingLng : null,
       online_at: new Date().toISOString()
@@ -1366,7 +1377,6 @@ function startGeolocationTracking() {
         STATE.userLat = position.coords.latitude;
         STATE.userLng = position.coords.longitude;
         
-        // 🌟 Generación dinámica de nuevas cartas a medida que el jugador avanza
         if (!lastSpawnLat || !lastSpawnLng || getDistanceInMeters(lastSpawnLat, lastSpawnLng, STATE.userLat, STATE.userLng) > 80) {
           lastSpawnLat = STATE.userLat;
           lastSpawnLng = STATE.userLng;
