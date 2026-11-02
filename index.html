@@ -615,6 +615,7 @@ window.processPlayerLogin = async function(){
     swal("Sala no encontrada ❌", `La sala "${roomCodeInput}" no existe o el Administrador aún no la ha creado.`, "error");    
     return;  }
 
+  // Guardar en localStorage para persistencia automática de sesión
   localStorage.setItem('geo_nick', nickInput);
   localStorage.setItem('geo_room', roomCodeInput);
   localStorage.setItem('geo_class', playerClass);
@@ -838,6 +839,7 @@ async function attemptCollectGeocache(cache) {
     return;
   }
 
+  // Marcar como reclamada globalmente para que desaparezca para todos
   await supabase.from('geocaches').update({ claimed: true }).eq('id', cache.id);
 
   if (mapMarkersList[cache.id]) {
@@ -925,52 +927,38 @@ function checkPlayerLevelProgression() {
   }
 }
 
-// 👥 MULTIJUGADOR CORREGIDO (PRESENCIA ÚNICA POR SESIÓN)
 function setupRealtimePresence(){  
-  if (roomChannel) supabase.removeChannel(roomChannel);
-
-  // 🔑 Clave única combinando Email + SESSION_ID para no sobrescribir usuarios
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
-    config: { presence: { key: STATE.user.email + '_' + SESSION_ID } }  
+    config: { presence: { key: STATE.user.email } }  
   });
 
-  roomChannel
+  roomChannel    
     .on('presence', { event: 'sync' }, () => {      
       currentPresenceState = roomChannel.presenceState();      
       updateOnlinePlayersCount(currentPresenceState);      
       renderAllPlayersOnMap(currentPresenceState);
       checkNearbyPlayersForBattle(currentPresenceState);
-    })
-    .on('presence', { event: 'join' }, () => {
-      currentPresenceState = roomChannel.presenceState();
-      updateOnlinePlayersCount(currentPresenceState);
-      renderAllPlayersOnMap(currentPresenceState);
-    })
-    .on('presence', { event: 'leave' }, () => {
-      currentPresenceState = roomChannel.presenceState();
-      updateOnlinePlayersCount(currentPresenceState);
-      renderAllPlayersOnMap(currentPresenceState);
-    })
+    })    
     .subscribe(async (status) => {      
       if (status === 'SUBSCRIBED') {        
-        await updatePresenceState();
+        updatePresenceState();
       }    
     });
 }
 
 function updatePresenceState() {
   if (roomChannel) {
-    return roomChannel.track({
+    roomChannel.track({
       email: STATE.user.email,
       session: SESSION_ID,
       nick: STATE.user.nick,
       playerClass: STATE.user.playerClass,
       avatar: STATE.user.avatarUrl,
-      lat: STATE.userLat || 40.7164,
-      lng: STATE.userLng || 0.7365,
-      victories: STATE.victories || 0,
-      cardsCount: STATE.cardsCaptured || 0,
-      level: STATE.playerLevel || 1,
+      lat: STATE.userLat,
+      lng: STATE.userLng,
+      victories: STATE.victories,
+      cardsCount: STATE.cardsCaptured,
+      level: STATE.playerLevel,
       pingLat: STATE.pingLat !== null ? STATE.pingLat : null,
       pingLng: STATE.pingLng !== null ? STATE.pingLng : null,
       online_at: new Date().toISOString()
@@ -985,16 +973,14 @@ function updateOnlinePlayersCount(state) {
 }
 
 function renderAllPlayersOnMap(presenceState) {
-  const activeSessions = [];
+  const activeEmails = [];
 
   Object.keys(presenceState).forEach(key => {
     const presences = presenceState[key];
     presences.forEach(p => {
-      const uniquePlayerKey = p.email + '_' + (p.session || 'def');
-      activeSessions.push(uniquePlayerKey);
+      activeEmails.push(p.email);
 
-      // Comprobar por SESSION_ID para no ocultar a otros clientes con el mismo Nick
-      if (p.session === SESSION_ID) {
+      if (p.email === STATE.user.email) {
         if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
           try {
             tacticalPings['userRoute'].setLatLngs([
@@ -1019,9 +1005,9 @@ function renderAllPlayersOnMap(presenceState) {
         iconAnchor: [22, 22]
       });
 
-      if (playerMarkers[uniquePlayerKey]) {
-        playerMarkers[uniquePlayerKey].setLatLng([p.lat, p.lng]);
-        playerMarkers[uniquePlayerKey].playerData = p;
+      if (playerMarkers[p.email]) {
+        playerMarkers[p.email].setLatLng([p.lat, p.lng]);
+        playerMarkers[p.email].playerData = p;
       } else {
         const marker = L.marker([p.lat, p.lng], { icon: customPlayerIcon }).addTo(STATE.map);
         marker.playerData = p;
@@ -1031,11 +1017,11 @@ function renderAllPlayersOnMap(presenceState) {
           showPlayerProfileModal(marker.playerData);
         });
 
-        playerMarkers[uniquePlayerKey] = marker;
+        playerMarkers[p.email] = marker;
       }
 
-      const routeKey = `route_${uniquePlayerKey}`;
-      const markerKey = `marker_${uniquePlayerKey}`;
+      const routeKey = `route_${p.email}`;
+      const markerKey = `marker_${p.email}`;
 
       if (p.pingLat !== null && p.pingLat !== undefined && p.pingLng !== null && p.pingLng !== undefined) {
         if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
@@ -1078,18 +1064,18 @@ function renderAllPlayersOnMap(presenceState) {
     });
   });
 
-  Object.keys(playerMarkers).forEach(uniqueKey => {
-    if (!activeSessions.includes(uniqueKey)) {
-      if (playerMarkers[uniqueKey]) STATE.map.removeLayer(playerMarkers[uniqueKey]);
-      delete playerMarkers[uniqueKey];
+  Object.keys(playerMarkers).forEach(email => {
+    if (!activeEmails.includes(email)) {
+      if (playerMarkers[email]) STATE.map.removeLayer(playerMarkers[email]);
+      delete playerMarkers[email];
 
-      if (activePlayerRoutes[`route_${uniqueKey}`]) {
+      if (activePlayerRoutes[`route_${email}`]) {
         try {
-          STATE.map.removeLayer(activePlayerRoutes[`route_${uniqueKey}`]);
-          STATE.map.removeLayer(activePlayerRoutes[`marker_${uniqueKey}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
         } catch(e) {}
-        delete activePlayerRoutes[`route_${uniqueKey}`];
-        delete activePlayerRoutes[`marker_${uniqueKey}`];
+        delete activePlayerRoutes[`route_${email}`];
+        delete activePlayerRoutes[`marker_${email}`];
       }
     }
   });
@@ -1196,7 +1182,7 @@ function checkNearbyPlayersForBattle(presenceState) {
   Object.keys(presenceState).forEach(clientId => {    
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
-      if (p.session !== SESSION_ID) {        
+      if (p.email !== STATE.user.email) {        
         const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);            
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
@@ -1380,6 +1366,7 @@ function startGeolocationTracking() {
         STATE.userLat = position.coords.latitude;
         STATE.userLng = position.coords.longitude;
         
+        // 🌟 Generación dinámica de nuevas cartas a medida que el jugador avanza
         if (!lastSpawnLat || !lastSpawnLng || getDistanceInMeters(lastSpawnLat, lastSpawnLng, STATE.userLat, STATE.userLng) > 80) {
           lastSpawnLat = STATE.userLat;
           lastSpawnLng = STATE.userLng;
