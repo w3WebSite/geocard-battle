@@ -925,12 +925,13 @@ function checkPlayerLevelProgression() {
   }
 }
 
-// 👥 MULTIJUGADOR REFORZADO CON DETECCIÓN INMEDIATA
+// 👥 MULTIJUGADOR CORREGIDO (PRESENCIA ÚNICA POR SESIÓN)
 function setupRealtimePresence(){  
   if (roomChannel) supabase.removeChannel(roomChannel);
 
+  // 🔑 Clave única combinando Email + SESSION_ID para no sobrescribir usuarios
   roomChannel = supabase.channel('room_' + STATE.roomCode, {    
-    config: { presence: { key: STATE.user.email } }  
+    config: { presence: { key: STATE.user.email + '_' + SESSION_ID } }  
   });
 
   roomChannel
@@ -984,14 +985,16 @@ function updateOnlinePlayersCount(state) {
 }
 
 function renderAllPlayersOnMap(presenceState) {
-  const activeEmails = [];
+  const activeSessions = [];
 
   Object.keys(presenceState).forEach(key => {
     const presences = presenceState[key];
     presences.forEach(p => {
-      activeEmails.push(p.email);
+      const uniquePlayerKey = p.email + '_' + (p.session || 'def');
+      activeSessions.push(uniquePlayerKey);
 
-      if (p.email === STATE.user.email) {
+      // Comprobar por SESSION_ID para no ocultar a otros clientes con el mismo Nick
+      if (p.session === SESSION_ID) {
         if (tacticalPings['userRoute'] && STATE.pingLat && STATE.pingLng) {
           try {
             tacticalPings['userRoute'].setLatLngs([
@@ -1016,9 +1019,9 @@ function renderAllPlayersOnMap(presenceState) {
         iconAnchor: [22, 22]
       });
 
-      if (playerMarkers[p.email]) {
-        playerMarkers[p.email].setLatLng([p.lat, p.lng]);
-        playerMarkers[p.email].playerData = p;
+      if (playerMarkers[uniquePlayerKey]) {
+        playerMarkers[uniquePlayerKey].setLatLng([p.lat, p.lng]);
+        playerMarkers[uniquePlayerKey].playerData = p;
       } else {
         const marker = L.marker([p.lat, p.lng], { icon: customPlayerIcon }).addTo(STATE.map);
         marker.playerData = p;
@@ -1028,11 +1031,11 @@ function renderAllPlayersOnMap(presenceState) {
           showPlayerProfileModal(marker.playerData);
         });
 
-        playerMarkers[p.email] = marker;
+        playerMarkers[uniquePlayerKey] = marker;
       }
 
-      const routeKey = `route_${p.email}`;
-      const markerKey = `marker_${p.email}`;
+      const routeKey = `route_${uniquePlayerKey}`;
+      const markerKey = `marker_${uniquePlayerKey}`;
 
       if (p.pingLat !== null && p.pingLat !== undefined && p.pingLng !== null && p.pingLng !== undefined) {
         if (activePlayerRoutes[routeKey] && activePlayerRoutes[markerKey]) {
@@ -1075,18 +1078,18 @@ function renderAllPlayersOnMap(presenceState) {
     });
   });
 
-  Object.keys(playerMarkers).forEach(email => {
-    if (!activeEmails.includes(email)) {
-      if (playerMarkers[email]) STATE.map.removeLayer(playerMarkers[email]);
-      delete playerMarkers[email];
+  Object.keys(playerMarkers).forEach(uniqueKey => {
+    if (!activeSessions.includes(uniqueKey)) {
+      if (playerMarkers[uniqueKey]) STATE.map.removeLayer(playerMarkers[uniqueKey]);
+      delete playerMarkers[uniqueKey];
 
-      if (activePlayerRoutes[`route_${email}`]) {
+      if (activePlayerRoutes[`route_${uniqueKey}`]) {
         try {
-          STATE.map.removeLayer(activePlayerRoutes[`route_${email}`]);
-          STATE.map.removeLayer(activePlayerRoutes[`marker_${email}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`route_${uniqueKey}`]);
+          STATE.map.removeLayer(activePlayerRoutes[`marker_${uniqueKey}`]);
         } catch(e) {}
-        delete activePlayerRoutes[`route_${email}`];
-        delete activePlayerRoutes[`marker_${email}`];
+        delete activePlayerRoutes[`route_${uniqueKey}`];
+        delete activePlayerRoutes[`marker_${uniqueKey}`];
       }
     }
   });
@@ -1193,7 +1196,7 @@ function checkNearbyPlayersForBattle(presenceState) {
   Object.keys(presenceState).forEach(clientId => {    
     const presences = presenceState[clientId];    
     presences.forEach(p => {      
-      if (p.email !== STATE.user.email) {        
+      if (p.session !== SESSION_ID) {        
         const distance = getDistanceInMeters(STATE.userLat, STATE.userLng, p.lat, p.lng);            
         if (distance <= 15 && STATE.lastEnemyBattled !== p.email) {          
           STATE.lastBattleTime = now;          
